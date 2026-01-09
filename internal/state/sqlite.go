@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,9 @@ import (
 
 //go:embed migrations/001_initial.sql
 var initialMigration string
+
+//go:embed migrations/002_add_env_vars.sql
+var envVarsMigration string
 
 // Store provides state management for OtterStack using SQLite.
 type Store struct {
@@ -105,14 +109,20 @@ func (s *Store) migrate() error {
 		if _, err := s.db.Exec(initialMigration); err != nil {
 			return fmt.Errorf("failed to run initial migration: %w", err)
 		}
-		return nil
+		version = 1
 	}
 
 	// Run migrations based on current version
-	// For now we only have version 1
 	if version < 1 {
 		if _, err := s.db.Exec(initialMigration); err != nil {
 			return fmt.Errorf("failed to run initial migration: %w", err)
+		}
+		version = 1
+	}
+
+	if version < 2 {
+		if _, err := s.db.Exec(envVarsMigration); err != nil {
+			return fmt.Errorf("failed to run env vars migration: %w", err)
 		}
 	}
 
@@ -529,6 +539,93 @@ func (s *Store) GetInterruptedDeployments(ctx context.Context) ([]*Deployment, e
 	}
 
 	return deployments, rows.Err()
+}
+
+// --- Environment Variable Operations ---
+
+// SetEnvVars sets environment variables for a project (merges with existing).
+func (s *Store) SetEnvVars(ctx context.Context, projectID string, vars map[string]string) error {
+	// Get existing vars
+	existing, err := s.GetEnvVars(ctx, projectID)
+	if err != nil {
+		return err
+	}
+
+	// Merge new vars into existing
+	for k, v := range vars {
+		existing[k] = v
+	}
+
+	// Serialize and update
+	data, err := json.Marshal(existing)
+	if err != nil {
+		return fmt.Errorf("failed to marshal env vars: %w", err)
+	}
+
+	result, err := s.db.ExecContext(ctx, `UPDATE projects SET env_vars = ? WHERE id = ?`, string(data), projectID)
+	if err != nil {
+		return fmt.Errorf("failed to update env vars: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.ErrProjectNotFound
+	}
+
+	return nil
+}
+
+// GetEnvVars returns environment variables for a project.
+func (s *Store) GetEnvVars(ctx context.Context, projectID string) (map[string]string, error) {
+	var envJSON sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT env_vars FROM projects WHERE id = ?`, projectID).Scan(&envJSON)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.ErrProjectNotFound
+		}
+		return nil, fmt.Errorf("failed to get env vars: %w", err)
+	}
+
+	// Handle NULL or empty string
+	if !envJSON.Valid || envJSON.String == "" {
+		return make(map[string]string), nil
+	}
+
+	var vars map[string]string
+	if err := json.Unmarshal([]byte(envJSON.String), &vars); err != nil {
+		return nil, fmt.Errorf("failed to parse env vars: %w", err)
+	}
+
+	if vars == nil {
+		vars = make(map[string]string)
+	}
+
+	return vars, nil
+}
+
+// DeleteEnvVar removes an environment variable from a project.
+func (s *Store) DeleteEnvVar(ctx context.Context, projectID, key string) error {
+	vars, err := s.GetEnvVars(ctx, projectID)
+	if err != nil {
+		return err
+	}
+
+	delete(vars, key)
+
+	data, err := json.Marshal(vars)
+	if err != nil {
+		return fmt.Errorf("failed to marshal env vars: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, `UPDATE projects SET env_vars = ? WHERE id = ?`, string(data), projectID)
+	if err != nil {
+		return fmt.Errorf("failed to update env vars: %w", err)
+	}
+
+	return nil
 }
 
 // --- Helper Functions ---

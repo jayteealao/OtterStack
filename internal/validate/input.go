@@ -15,6 +15,24 @@ import (
 // projectNameRegexSingle validates single-character project names.
 var projectNameRegexSingle = regexp.MustCompile(`^[a-z0-9]$`)
 
+// envKeyRegex validates environment variable keys per POSIX convention.
+// Must start with letter or underscore, followed by letters, numbers, or underscores.
+var envKeyRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// EnvKey validates an environment variable key per POSIX convention.
+// Keys must start with a letter or underscore, followed by letters, numbers, or underscores.
+func EnvKey(key string) error {
+	if key == "" {
+		return errors.ErrInvalidEnvKey
+	}
+
+	if !envKeyRegex.MatchString(key) {
+		return errors.ErrInvalidEnvKey
+	}
+
+	return nil
+}
+
 // projectNameRegexMulti validates multi-character project names (2-64 chars).
 // Must start and end with alphanumeric, middle can have hyphens.
 var projectNameRegexMulti = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$`)

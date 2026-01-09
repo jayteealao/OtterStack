@@ -200,6 +200,18 @@ func (m *mockStore) GetInterruptedDeployments(ctx context.Context) ([]*state.Dep
 	return result, nil
 }
 
+func (m *mockStore) SetEnvVars(ctx context.Context, projectID string, vars map[string]string) error {
+	return nil
+}
+
+func (m *mockStore) GetEnvVars(ctx context.Context, projectID string) (map[string]string, error) {
+	return make(map[string]string), nil
+}
+
+func (m *mockStore) DeleteEnvVar(ctx context.Context, projectID, key string) error {
+	return nil
+}
+
 // mockGit implements git.GitOperations for testing
 type mockGit struct {
 	repoPath      string

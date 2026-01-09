@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/jayteealao/otterstack/internal/compose"
@@ -137,12 +139,26 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 		return nil, fmt.Errorf("deployment cancelled: %w", ctx.Err())
 	}
 
+	// Write env file if project has env vars
+	envVars, err := d.store.GetEnvVars(ctx, project.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get env vars: %w", err)
+	}
+
+	envFilePath, err := writeEnvFile(opts.DataDir, project.Name, envVars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write env file: %w", err)
+	}
+	if envFilePath != "" {
+		onVerbose(fmt.Sprintf("Using env file: %s", envFilePath))
+	}
+
 	// Start services with timeout
 	onStatus("Starting services...")
 	deployCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
 
-	if err := composeMgr.Up(deployCtx); err != nil {
+	if err := composeMgr.Up(deployCtx, envFilePath); err != nil {
 		return nil, fmt.Errorf("failed to start services: %w", err)
 	}
 
@@ -205,4 +221,43 @@ func (d *Deployer) CleanupOldWorktrees(ctx context.Context, project *state.Proje
 	}
 
 	return nil
+}
+
+// writeEnvFile writes environment variables to a file in dotenv format.
+// Returns the file path if env vars exist, empty string otherwise.
+func writeEnvFile(dataDir, projectName string, vars map[string]string) (string, error) {
+	if len(vars) == 0 {
+		return "", nil
+	}
+
+	// Create envfiles directory if needed
+	envDir := filepath.Join(dataDir, "envfiles")
+	if err := os.MkdirAll(envDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create envfiles directory: %w", err)
+	}
+
+	// Write env file with 0600 permissions
+	envPath := filepath.Join(envDir, projectName+".env")
+	f, err := os.OpenFile(envPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", fmt.Errorf("failed to create env file: %w", err)
+	}
+	defer f.Close()
+
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		// Write in KEY=value format, quoting values that contain special characters
+		v := vars[k]
+		if _, err := fmt.Fprintf(f, "%s=%s\n", k, v); err != nil {
+			return "", fmt.Errorf("failed to write env var: %w", err)
+		}
+	}
+
+	return envPath, nil
 }

@@ -41,8 +41,15 @@ func (m *Manager) ProjectName() string {
 }
 
 // Up starts the compose services with --wait flag.
-func (m *Manager) Up(ctx context.Context) error {
+// If envFilePath is not empty, the file is passed to docker compose via --env-file.
+func (m *Manager) Up(ctx context.Context, envFilePath string) error {
 	args := m.baseArgs()
+
+	// Add env file if provided
+	if envFilePath != "" {
+		args = append(args, "--env-file", envFilePath)
+	}
+
 	args = append(args, "up", "-d", "--wait", "--remove-orphans")
 
 	cmd := exec.CommandContext(ctx, "docker", args...)

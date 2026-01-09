@@ -3,6 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/jayteealao/otterstack/internal/compose"
@@ -123,8 +126,27 @@ func runRollback(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("compose validation failed: %w", err)
 	}
 
+	// Write env file if project has env vars
+	dataDir, err := getDataDir()
+	if err != nil {
+		return err
+	}
+
+	envVars, err := store.GetEnvVars(ctx, project.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get env vars: %w", err)
+	}
+
+	envFilePath, err := writeRollbackEnvFile(dataDir, projectName, envVars)
+	if err != nil {
+		return fmt.Errorf("failed to write env file: %w", err)
+	}
+	if envFilePath != "" {
+		printVerbose("Using env file: %s", envFilePath)
+	}
+
 	fmt.Println("Starting target deployment...")
-	if err := composeMgr.Up(ctx); err != nil {
+	if err := composeMgr.Up(ctx, envFilePath); err != nil {
 		return fmt.Errorf("failed to start target deployment: %w", err)
 	}
 
@@ -156,4 +178,42 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Rollback successful! %s now running at %s\n", projectName, git.ShortSHA(targetDeployment.GitSHA))
 
 	return nil
+}
+
+// writeRollbackEnvFile writes environment variables to a file in dotenv format.
+// Returns the file path if env vars exist, empty string otherwise.
+func writeRollbackEnvFile(dataDir, projectName string, vars map[string]string) (string, error) {
+	if len(vars) == 0 {
+		return "", nil
+	}
+
+	// Create envfiles directory if needed
+	envDir := filepath.Join(dataDir, "envfiles")
+	if err := os.MkdirAll(envDir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create envfiles directory: %w", err)
+	}
+
+	// Write env file with 0600 permissions
+	envPath := filepath.Join(envDir, projectName+".env")
+	f, err := os.OpenFile(envPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return "", fmt.Errorf("failed to create env file: %w", err)
+	}
+	defer f.Close()
+
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := vars[k]
+		if _, err := fmt.Fprintf(f, "%s=%s\n", k, v); err != nil {
+			return "", fmt.Errorf("failed to write env var: %w", err)
+		}
+	}
+
+	return envPath, nil
 }

@@ -69,3 +69,9 @@ var (
 	ErrNoPreviousDeployment = errors.New("no previous deployment to rollback to")
 )
 
+// Environment variable errors
+var (
+	// ErrInvalidEnvKey indicates the environment variable key is invalid.
+	ErrInvalidEnvKey = errors.New("invalid environment variable key: must start with letter or underscore, contain only letters, numbers, and underscores")
+)
+

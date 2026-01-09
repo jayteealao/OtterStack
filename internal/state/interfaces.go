@@ -25,6 +25,11 @@ type StateStore interface {
 	GetPreviousDeployment(ctx context.Context, projectID string) (*Deployment, error)
 	GetDeploymentBySHA(ctx context.Context, projectID, sha string) (*Deployment, error)
 	GetInterruptedDeployments(ctx context.Context) ([]*Deployment, error)
+
+	// Environment variable operations
+	SetEnvVars(ctx context.Context, projectID string, vars map[string]string) error
+	GetEnvVars(ctx context.Context, projectID string) (map[string]string, error)
+	DeleteEnvVar(ctx context.Context, projectID, key string) error
 }
 
 // Ensure Store implements StateStore

@@ -5,7 +5,7 @@ import "context"
 // ComposeOperations defines the interface for docker compose operations.
 type ComposeOperations interface {
 	ProjectName() string
-	Up(ctx context.Context) error
+	Up(ctx context.Context, envFilePath string) error
 	Down(ctx context.Context, removeVolumes bool) error
 	Status(ctx context.Context) ([]ServiceStatus, error)
 	Validate(ctx context.Context) error
