@@ -11,7 +11,9 @@ import (
 
 	"github.com/jayteealao/otterstack/internal/compose"
 	"github.com/jayteealao/otterstack/internal/git"
+	"github.com/jayteealao/otterstack/internal/lock"
 	"github.com/jayteealao/otterstack/internal/state"
+	"github.com/jayteealao/otterstack/internal/traefik"
 )
 
 // DeployOptions contains options for a deployment.
@@ -46,6 +48,13 @@ func NewDeployer(store state.StateStore, gitMgr git.GitOperations) *Deployer {
 
 // Deploy performs a deployment for the given project.
 func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts DeployOptions) (*DeployResult, error) {
+	// 1. ACQUIRE FILE LOCK (prevents concurrent deployments)
+	deploymentLock, err := lock.AcquireDeploymentLock(opts.DataDir, project.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire deployment lock: %w", err)
+	}
+	defer deploymentLock.Release()
+
 	// Default callbacks
 	onStatus := opts.OnStatus
 	if onStatus == nil {
@@ -126,6 +135,18 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 		return nil, fmt.Errorf("compose validation failed: %w", err)
 	}
 
+	// Check if Traefik is available (only if routing is enabled)
+	var traefikAvailable bool
+	if project.TraefikRoutingEnabled {
+		onVerbose("Checking for Traefik...")
+		traefikAvailable, _ = traefik.IsRunning(ctx)
+		if !traefikAvailable {
+			onStatus("Warning: Traefik not detected. Deployment will proceed without priority routing.")
+		} else {
+			onStatus("Traefik detected. Priority-based routing will be enabled.")
+		}
+	}
+
 	// Pull images if not skipped
 	if !opts.SkipPull {
 		onStatus("Pulling images...")
@@ -160,6 +181,42 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 
 	if err := composeMgr.Up(deployCtx, envFilePath); err != nil {
 		return nil, fmt.Errorf("failed to start services: %w", err)
+	}
+
+	// Health check NEW containers (BEFORE applying Traefik labels)
+	// This is critical: we only route traffic to healthy containers
+	if project.TraefikRoutingEnabled && traefikAvailable {
+		onStatus("Waiting for containers to be healthy...")
+		if err := traefik.WaitForHealthy(deployCtx, composeProjectName, traefik.DefaultHealthTimeout); err != nil {
+			// UNHEALTHY: Stop new containers, keep old running
+			onStatus("Health check failed. Rolling back...")
+			if stopErr := compose.StopProjectByName(ctx, composeProjectName, 30*time.Second); stopErr != nil {
+				onVerbose(fmt.Sprintf("Warning: failed to stop unhealthy containers: %v", stopErr))
+			}
+			errMsg := err.Error()
+			d.store.UpdateDeploymentStatus(ctx, deployment.ID, "failed", &errMsg)
+			return nil, fmt.Errorf("health check failed: %w (deployment rolled back, old containers still serving)", err)
+		}
+		onStatus("Containers are healthy.")
+	}
+
+	// Generate and apply Traefik override file with priority labels
+	// This happens AFTER health check, so traffic only switches if containers are healthy
+	if project.TraefikRoutingEnabled && traefikAvailable {
+		onStatus("Applying Traefik priority labels...")
+		priority := time.Now().UnixMilli()
+		overridePath, err := traefik.GenerateOverride(worktreePath, priority)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate Traefik override: %w", err)
+		}
+
+		// Apply override file - this triggers Traefik to route traffic to new containers
+		// Compose will merge the override with the base compose file
+		overrideComposeMgr := compose.NewManager(worktreePath, project.ComposeFile+","+filepath.Base(overridePath), composeProjectName)
+		if err := overrideComposeMgr.Up(ctx, envFilePath); err != nil {
+			return nil, fmt.Errorf("failed to apply Traefik labels: %w", err)
+		}
+		onVerbose(fmt.Sprintf("Applied priority: %d (new deployment gets traffic)", priority))
 	}
 
 	// Deactivate previous deployments

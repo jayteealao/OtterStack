@@ -58,9 +58,10 @@ Use --force to also remove worktrees and cloned repositories.`,
 }
 
 var (
-	composeFileFlag string
-	retentionFlag   int
-	forceFlag       bool
+	composeFileFlag      string
+	retentionFlag        int
+	forceFlag            bool
+	traefikRoutingFlag   bool
 )
 
 func init() {
@@ -72,6 +73,7 @@ func init() {
 	// Add flags
 	projectAddCmd.Flags().StringVarP(&composeFileFlag, "compose-file", "f", "", "compose file name (default: auto-detect)")
 	projectAddCmd.Flags().IntVar(&retentionFlag, "retention", 3, "number of worktrees to retain")
+	projectAddCmd.Flags().BoolVar(&traefikRoutingFlag, "traefik-routing", false, "enable Traefik priority-based routing for zero-downtime deployments")
 
 	projectRemoveCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "force removal including worktrees and cloned repos")
 }
@@ -163,13 +165,14 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 
 	// Create project record
 	project := &state.Project{
-		Name:              name,
-		RepoType:          repoType,
-		RepoURL:           repoURL,
-		RepoPath:          repoPath,
-		ComposeFile:       composeFile,
-		WorktreeRetention: retentionFlag,
-		Status:            "ready",
+		Name:                 name,
+		RepoType:             repoType,
+		RepoURL:              repoURL,
+		RepoPath:             repoPath,
+		ComposeFile:          composeFile,
+		WorktreeRetention:    retentionFlag,
+		Status:               "ready",
+		TraefikRoutingEnabled: traefikRoutingFlag,
 	}
 
 	if err := store.CreateProject(ctx, project); err != nil {
@@ -180,6 +183,9 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Repository: %s (%s)\n", repoPath, repoType)
 	fmt.Printf("  Compose file: %s\n", composeFile)
 	fmt.Printf("  Worktree retention: %d\n", retentionFlag)
+	if traefikRoutingFlag {
+		fmt.Printf("  Traefik routing: enabled\n")
+	}
 
 	return nil
 }

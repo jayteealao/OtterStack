@@ -23,6 +23,9 @@ var initialMigration string
 //go:embed migrations/002_add_env_vars.sql
 var envVarsMigration string
 
+//go:embed migrations/003_add_traefik_routing.sql
+var traefikRoutingMigration string
+
 // Store provides state management for OtterStack using SQLite.
 type Store struct {
 	db      *sql.DB
@@ -31,16 +34,17 @@ type Store struct {
 
 // Project represents a registered project.
 type Project struct {
-	ID                string
-	Name              string
-	RepoType          string // "local" or "remote"
-	RepoURL           string // only for remote repos
-	RepoPath          string
-	ComposeFile       string
-	WorktreeRetention int
-	Status            string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                   string
+	Name                 string
+	RepoType             string // "local" or "remote"
+	RepoURL              string // only for remote repos
+	RepoPath             string
+	ComposeFile          string
+	WorktreeRetention    int
+	Status               string
+	TraefikRoutingEnabled bool // Enable Traefik priority-based routing
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // Deployment represents a deployment record.
@@ -124,6 +128,13 @@ func (s *Store) migrate() error {
 		if _, err := s.db.Exec(envVarsMigration); err != nil {
 			return fmt.Errorf("failed to run env vars migration: %w", err)
 		}
+		version = 2
+	}
+
+	if version < 3 {
+		if _, err := s.db.Exec(traefikRoutingMigration); err != nil {
+			return fmt.Errorf("failed to run traefik routing migration: %w", err)
+		}
 	}
 
 	return nil
@@ -138,13 +149,13 @@ func (s *Store) CreateProject(ctx context.Context, p *Project) error {
 	}
 
 	query := `
-		INSERT INTO projects (id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO projects (id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, traefik_routing_enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
 		p.ID, p.Name, p.RepoType, nullString(p.RepoURL), p.RepoPath,
-		p.ComposeFile, p.WorktreeRetention, p.Status,
+		p.ComposeFile, p.WorktreeRetention, p.Status, p.TraefikRoutingEnabled,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -159,7 +170,7 @@ func (s *Store) CreateProject(ctx context.Context, p *Project) error {
 // GetProject retrieves a project by name.
 func (s *Store) GetProject(ctx context.Context, name string) (*Project, error) {
 	query := `
-		SELECT id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, created_at, updated_at
+		SELECT id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, traefik_routing_enabled, created_at, updated_at
 		FROM projects WHERE name = ?
 	`
 
@@ -167,7 +178,7 @@ func (s *Store) GetProject(ctx context.Context, name string) (*Project, error) {
 	var repoURL sql.NullString
 	err := s.db.QueryRowContext(ctx, query, name).Scan(
 		&p.ID, &p.Name, &p.RepoType, &repoURL, &p.RepoPath,
-		&p.ComposeFile, &p.WorktreeRetention, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&p.ComposeFile, &p.WorktreeRetention, &p.Status, &p.TraefikRoutingEnabled, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -183,7 +194,7 @@ func (s *Store) GetProject(ctx context.Context, name string) (*Project, error) {
 // GetProjectByID retrieves a project by ID.
 func (s *Store) GetProjectByID(ctx context.Context, id string) (*Project, error) {
 	query := `
-		SELECT id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, created_at, updated_at
+		SELECT id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, traefik_routing_enabled, created_at, updated_at
 		FROM projects WHERE id = ?
 	`
 
@@ -191,7 +202,7 @@ func (s *Store) GetProjectByID(ctx context.Context, id string) (*Project, error)
 	var repoURL sql.NullString
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&p.ID, &p.Name, &p.RepoType, &repoURL, &p.RepoPath,
-		&p.ComposeFile, &p.WorktreeRetention, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&p.ComposeFile, &p.WorktreeRetention, &p.Status, &p.TraefikRoutingEnabled, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -207,7 +218,7 @@ func (s *Store) GetProjectByID(ctx context.Context, id string) (*Project, error)
 // ListProjects returns all projects.
 func (s *Store) ListProjects(ctx context.Context) ([]*Project, error) {
 	query := `
-		SELECT id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, created_at, updated_at
+		SELECT id, name, repo_type, repo_url, repo_path, compose_file, worktree_retention, status, traefik_routing_enabled, created_at, updated_at
 		FROM projects ORDER BY name
 	`
 
@@ -223,7 +234,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]*Project, error) {
 		var repoURL sql.NullString
 		if err := rows.Scan(
 			&p.ID, &p.Name, &p.RepoType, &repoURL, &p.RepoPath,
-			&p.ComposeFile, &p.WorktreeRetention, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&p.ComposeFile, &p.WorktreeRetention, &p.Status, &p.TraefikRoutingEnabled, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
 		}
