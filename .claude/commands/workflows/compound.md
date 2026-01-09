@@ -10,7 +10,7 @@ Coordinate multiple subagents working in parallel to document a recently solved 
 
 ## Purpose
 
-Captures problem solutions while context is fresh, creating structured documentation in `docs/solutions/` with YAML frontmatter for searchability and future reference. Uses parallel subagents for maximum efficiency.
+Captures problem solutions while context is fresh, creating structured documentation in `.claude/solutions/` with YAML frontmatter for searchability and future reference. Uses parallel subagents for maximum efficiency.
 
 **Why "compound"?** Each documented solution compounds your team's knowledge. The first time you solve a problem takes research. Document it, and the next occurrence takes minutes. Knowledge compounds.
 
@@ -38,7 +38,7 @@ This command launches multiple specialized subagents IN PARALLEL to maximize eff
    - Returns: Solution content block
 
 ### 3. **Related Docs Finder** (Parallel)
-   - Searches `docs/solutions/` for related documentation
+   - Searches `.claude/solutions/` for related documentation
    - Identifies cross-references and links
    - Finds related GitHub issues
    - Returns: Links and relationships
@@ -50,7 +50,7 @@ This command launches multiple specialized subagents IN PARALLEL to maximize eff
    - Returns: Prevention/testing content
 
 ### 5. **Category Classifier** (Parallel)
-   - Determines optimal `docs/solutions/` category
+   - Determines optimal `.claude/solutions/` category
    - Validates category against schema
    - Suggests filename based on slug
    - Returns: Final path and filename
@@ -67,7 +67,7 @@ This command launches multiple specialized subagents IN PARALLEL to maximize eff
    - **security_issue** → `security-sentinel`
    - **database_issue** → `data-integrity-guardian`
    - **test_failure** → `cora-test-reviewer`
-   - Any code-heavy issue → `kieran-rails-reviewer` + `code-simplicity-reviewer`
+   - Any code-heavy issue → `senior-code-reviewer` + `code-simplicity-reviewer`
 
 ## What It Captures
 
@@ -96,7 +96,7 @@ This command launches multiple specialized subagents IN PARALLEL to maximize eff
 
 **Organized documentation:**
 
-- File: `docs/solutions/[category]/[filename].md`
+- File: `.claude/solutions/[category]/[filename].md`
 
 **Categories auto-detected from problem:**
 
@@ -120,17 +120,17 @@ Primary Subagent Results:
   ✓ Solution Extractor: Extracted 3 code fixes
   ✓ Related Docs Finder: Found 2 related issues
   ✓ Prevention Strategist: Generated test cases
-  ✓ Category Classifier: docs/solutions/performance-issues/
+  ✓ Category Classifier: .claude/solutions/performance-issues/
   ✓ Documentation Writer: Created complete markdown
 
 Specialized Agent Reviews (Auto-Triggered):
   ✓ performance-oracle: Validated query optimization approach
-  ✓ kieran-rails-reviewer: Code examples meet Rails standards
+  ✓ senior-code-reviewer: Code examples meet Rails standards
   ✓ code-simplicity-reviewer: Solution is appropriately minimal
   ✓ every-style-editor: Documentation style verified
 
 File created:
-- docs/solutions/performance-issues/n-plus-one-brief-generation.md
+- .claude/solutions/performance-issues/n-plus-one-brief-generation.md
 
 This documentation will be searchable for future reference when similar
 issues occur in the Email Processing or Brief System modules.
@@ -148,7 +148,7 @@ What's next?
 This creates a compounding knowledge system:
 
 1. First time you solve "N+1 query in brief generation" → Research (30 min)
-2. Document the solution → docs/solutions/performance-issues/n-plus-one-briefs.md (5 min)
+2. Document the solution → .claude/solutions/performance-issues/n-plus-one-briefs.md (5 min)
 3. Next time similar issue occurs → Quick lookup (2 min)
 4. Knowledge compounds → Team gets smarter
 
@@ -177,7 +177,7 @@ Build → Test → Find Issue → Research → Improve → Document → Validate
 Based on problem type, these agents can enhance documentation:
 
 ### Code Quality & Review
-- **kieran-rails-reviewer**: Reviews code examples for Rails best practices
+- **senior-code-reviewer**: Reviews code examples for Rails best practices
 - **code-simplicity-reviewer**: Ensures solution code is minimal and clear
 - **pattern-recognition-specialist**: Identifies anti-patterns or repeating issues
 
@@ -198,5 +198,5 @@ Based on problem type, these agents can enhance documentation:
 
 ## Related Commands
 
-- `/research [topic]` - Deep investigation (searches docs/solutions/ for patterns)
+- `/research [topic]` - Deep investigation (searches .claude/solutions/ for patterns)
 - `/workflows:plan` - Planning workflow (references documented solutions)

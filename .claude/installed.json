@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "installedAt": "2026-01-07T23:46:52.327Z",
-  "updatedAt": "2026-01-08T00:26:35.689Z",
+  "updatedAt": "2026-01-08T20:27:58.018Z",
   "plugins": [
     {
       "name": "dev-browser",
@@ -18,13 +18,13 @@
     },
     {
       "name": "compound-engineering",
-      "version": "2.24.0",
+      "version": "2.28.0",
       "sourcePath": "C:\\Users\\jayte\\Documents\\dev\\compound-engineering-plugin",
       "installedAt": "2026-01-07T23:46:55.826Z",
       "components": {
-        "agents": 27,
-        "commands": 21,
-        "skills": 14,
+        "agents": 38,
+        "commands": 32,
+        "skills": 21,
         "mcpServers": 2,
         "variants": 0
       }

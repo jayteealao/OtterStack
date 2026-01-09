@@ -54,8 +54,8 @@ Ensure that the code is ready for analysis (either in worktree or on current bra
 
 Run ALL or most of these agents at the same time:
 
-1. Task kieran-rails-reviewer(PR content)
-2. Task dhh-rails-reviewer(PR title)
+1. Task senior-code-reviewer(PR content)
+2. Task framework-conventions-reviewer(PR title)
 3. If turbo is used: Task rails-turbo-expert(PR content)
 4. Task git-history-analyzer(PR content)
 5. Task dependency-detective(PR content)
@@ -367,7 +367,7 @@ After creating all todo files, present comprehensive summary:
 
 ### Review Agents Used:
 
-- kieran-rails-reviewer
+- senior-code-reviewer
 - security-sentinel
 - performance-oracle
 - architecture-strategist
