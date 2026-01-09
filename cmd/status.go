@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"text/tabwriter"
 
 	"github.com/jayteealao/otterstack/internal/compose"
-	"github.com/jayteealao/otterstack/internal/errors"
+	apperrors "github.com/jayteealao/otterstack/internal/errors"
 	"github.com/jayteealao/otterstack/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -65,7 +66,7 @@ func showAllProjectsStatus(cmd *cobra.Command) error {
 
 	for _, p := range projects {
 		deployment, err := store.GetActiveDeployment(ctx, p.ID)
-		if err != nil && err != errors.ErrNoActiveDeployment {
+		if err != nil && !errors.Is(err, apperrors.ErrNoActiveDeployment) {
 			return fmt.Errorf("failed to get deployment for %s: %w", p.Name, err)
 		}
 
@@ -85,7 +86,7 @@ func showAllProjectsStatus(cmd *cobra.Command) error {
 			if err == nil && len(services) > 0 {
 				running := 0
 				for _, s := range services {
-					if isServiceRunning(s.Status) {
+					if compose.IsServiceRunning(s.Status) {
 						running++
 					}
 				}
@@ -112,7 +113,7 @@ func showProjectStatus(cmd *cobra.Command, projectName string) error {
 
 	project, err := store.GetProject(ctx, projectName)
 	if err != nil {
-		if err == errors.ErrProjectNotFound {
+		if errors.Is(err, apperrors.ErrProjectNotFound) {
 			return fmt.Errorf("project %q not found", projectName)
 		}
 		return err
@@ -131,7 +132,7 @@ func showProjectStatus(cmd *cobra.Command, projectName string) error {
 	// Get active deployment
 	deployment, err := store.GetActiveDeployment(ctx, project.ID)
 	if err != nil {
-		if err == errors.ErrNoActiveDeployment {
+		if errors.Is(err, apperrors.ErrNoActiveDeployment) {
 			fmt.Println("No active deployment.")
 			return nil
 		}
@@ -199,8 +200,4 @@ func showProjectStatus(cmd *cobra.Command, projectName string) error {
 	}
 
 	return nil
-}
-
-func isServiceRunning(status string) bool {
-	return status == "running" || status == "Up" || len(status) > 0 && status[0] == 'U'
 }

@@ -42,11 +42,61 @@ func (m *Manager) IsGitRepo(ctx context.Context) bool {
 }
 
 // Clone clones a repository from URL to the repo path.
+// Uses atomic clone with temp directory and rename to prevent partial clones.
 func (m *Manager) Clone(ctx context.Context, url string) error {
-	cmd := exec.CommandContext(ctx, "git", "clone", url, m.repoPath)
+	// Create temp directory for atomic clone
+	parentDir := filepath.Dir(m.repoPath)
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory: %w", err)
+	}
+
+	tempDir, err := os.MkdirTemp(parentDir, ".clone-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	// Clean up temp directory on failure
+	success := false
+	defer func() {
+		if !success {
+			os.RemoveAll(tempDir)
+		}
+	}()
+
+	// Clone to temp directory
+	cmd := exec.CommandContext(ctx, "git", "clone", url, tempDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", errors.ErrGitCloneFailed, string(output))
+	}
+
+	// Atomic rename to final path
+	if err := os.Rename(tempDir, m.repoPath); err != nil {
+		return fmt.Errorf("failed to move cloned repo to final path: %w", err)
+	}
+
+	success = true
+	return nil
+}
+
+// CheckAuth performs a pre-flight auth check for the given URL.
+// Returns nil if auth is likely to succeed, error otherwise.
+func CheckAuth(ctx context.Context, url string) error {
+	// Use git ls-remote to check auth without actually cloning
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--exit-code", url, "HEAD")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		outputStr := string(output)
+		if strings.Contains(outputStr, "Authentication failed") ||
+			strings.Contains(outputStr, "Permission denied") ||
+			strings.Contains(outputStr, "could not read Username") {
+			return fmt.Errorf("authentication failed: %s", outputStr)
+		}
+		if strings.Contains(outputStr, "Repository not found") ||
+			strings.Contains(outputStr, "does not exist") {
+			return fmt.Errorf("repository not found: %s", url)
+		}
+		return fmt.Errorf("failed to access repository: %s", outputStr)
 	}
 	return nil
 }

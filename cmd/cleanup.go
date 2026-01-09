@@ -1,13 +1,14 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/jayteealao/otterstack/internal/compose"
-	"github.com/jayteealao/otterstack/internal/errors"
+	apperrors "github.com/jayteealao/otterstack/internal/errors"
 	"github.com/jayteealao/otterstack/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -96,8 +97,8 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 			projectName := entry.Name()
 
 			// Check if project exists in database
-			project, err := store.GetProject(ctx, projectName)
-			if err == errors.ErrProjectNotFound {
+			_, err := store.GetProject(ctx, projectName)
+			if errors.Is(err, apperrors.ErrProjectNotFound) {
 				fmt.Printf("  Found orphaned project directory: %s\n", projectName)
 				if !cleanupDryRunFlag {
 					orphanDir := filepath.Join(worktreesDir, projectName)
@@ -112,10 +113,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 				continue
 			}
 
-			// Clean up worktrees for this project
-			if err := cleanupProjectWorktrees(cmd, project.Name, project.RepoPath, dataDir, project.WorktreeRetention); err != nil {
-				fmt.Fprintf(os.Stderr, "  Warning: failed to cleanup worktrees for %s: %v\n", projectName, err)
-			}
+			// TODO: Per-project worktree cleanup can be added here as a future enhancement
 		}
 	}
 	fmt.Println()
@@ -173,8 +171,3 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func cleanupProjectWorktrees(cmd *cobra.Command, projectName, repoPath, dataDir string, retention int) error {
-	// This is a simplified cleanup - full implementation would check each worktree
-	// against the deployment database
-	return nil
-}

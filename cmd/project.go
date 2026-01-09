@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"text/tabwriter"
 
 	"github.com/jayteealao/otterstack/internal/compose"
-	"github.com/jayteealao/otterstack/internal/errors"
+	apperrors "github.com/jayteealao/otterstack/internal/errors"
 	"github.com/jayteealao/otterstack/internal/git"
 	"github.com/jayteealao/otterstack/internal/state"
 	"github.com/jayteealao/otterstack/internal/validate"
@@ -96,7 +97,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		return fmt.Errorf("project %q already exists", name)
 	}
-	if err != errors.ErrProjectNotFound {
+	if !errors.Is(err, apperrors.ErrProjectNotFound) {
 		return err
 	}
 
@@ -114,6 +115,12 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		repoType = "remote"
 		repoURL = repoArg
 
+		// Pre-flight auth check
+		printVerbose("Checking repository access...")
+		if err := git.CheckAuth(ctx, repoURL); err != nil {
+			return fmt.Errorf("cannot access repository: %w", err)
+		}
+
 		// Clone path will be managed by OtterStack
 		dataDir, err := getDataDir()
 		if err != nil {
@@ -121,7 +128,7 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		}
 		repoPath = fmt.Sprintf("%s/repos/%s", dataDir, name)
 
-		// Clone the repository
+		// Clone the repository (uses atomic clone with temp dir)
 		fmt.Printf("Cloning repository %s...\n", repoURL)
 		gitMgr := git.NewManager(repoPath)
 		if err := gitMgr.Clone(ctx, repoURL); err != nil {
@@ -221,7 +228,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	// Get project
 	project, err := store.GetProject(ctx, name)
 	if err != nil {
-		if err == errors.ErrProjectNotFound {
+		if errors.Is(err, apperrors.ErrProjectNotFound) {
 			return fmt.Errorf("project %q not found", name)
 		}
 		return err
@@ -229,7 +236,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 
 	// Check for active deployment
 	activeDeployment, err := store.GetActiveDeployment(ctx, project.ID)
-	if err != nil && err != errors.ErrNoActiveDeployment {
+	if err != nil && !errors.Is(err, apperrors.ErrNoActiveDeployment) {
 		return fmt.Errorf("failed to check active deployment: %w", err)
 	}
 

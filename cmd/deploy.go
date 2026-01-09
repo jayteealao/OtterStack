@@ -2,14 +2,16 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/jayteealao/otterstack/internal/compose"
-	"github.com/jayteealao/otterstack/internal/errors"
+	apperrors "github.com/jayteealao/otterstack/internal/errors"
 	"github.com/jayteealao/otterstack/internal/git"
 	"github.com/jayteealao/otterstack/internal/state"
+	"github.com/jayteealao/otterstack/internal/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -47,6 +49,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	var gitRef string
 	if len(args) > 1 {
 		gitRef = args[1]
+		if err := validate.GitRef(gitRef); err != nil {
+			return fmt.Errorf("invalid git ref: %w", err)
+		}
 	}
 
 	// Initialize store
@@ -73,7 +78,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Get project
 	project, err := store.GetProject(ctx, projectName)
 	if err != nil {
-		if err == errors.ErrProjectNotFound {
+		if errors.Is(err, apperrors.ErrProjectNotFound) {
 			return fmt.Errorf("project %q not found", projectName)
 		}
 		return err

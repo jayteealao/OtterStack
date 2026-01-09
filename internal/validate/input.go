@@ -196,6 +196,13 @@ func ComposeFilePrecedence() []string {
 // If overrideFile is specified, it validates and returns that file.
 func FindComposeFile(dir string, overrideFile string) (string, error) {
 	if overrideFile != "" {
+		// Validate no path traversal
+		if strings.Contains(overrideFile, "..") ||
+			strings.Contains(overrideFile, "/") ||
+			strings.Contains(overrideFile, "\\") {
+			return "", fmt.Errorf("compose file name cannot contain path separators or parent directory references")
+		}
+
 		fullPath := filepath.Join(dir, overrideFile)
 		if _, err := os.Stat(fullPath); err != nil {
 			if os.IsNotExist(err) {

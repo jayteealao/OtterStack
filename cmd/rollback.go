@@ -1,13 +1,15 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jayteealao/otterstack/internal/compose"
-	"github.com/jayteealao/otterstack/internal/errors"
+	apperrors "github.com/jayteealao/otterstack/internal/errors"
 	"github.com/jayteealao/otterstack/internal/git"
 	"github.com/jayteealao/otterstack/internal/state"
+	"github.com/jayteealao/otterstack/internal/validate"
 	"github.com/spf13/cobra"
 )
 
@@ -16,13 +18,20 @@ var rollbackCmd = &cobra.Command{
 	Short: "Rollback to the previous deployment",
 	Long: `Rollback a project to its previous successful deployment.
 
-This stops the current deployment and starts the previous one.`,
+This stops the current deployment and starts the previous one.
+
+Examples:
+  otterstack rollback myapp                  # Rollback to previous deployment
+  otterstack rollback myapp --to abc123d     # Rollback to specific SHA`,
 	Args: cobra.ExactArgs(1),
 	RunE: runRollback,
 }
 
+var rollbackToFlag string
+
 func init() {
 	rootCmd.AddCommand(rollbackCmd)
+	rollbackCmd.Flags().StringVar(&rollbackToFlag, "to", "", "rollback to specific SHA")
 }
 
 func runRollback(cmd *cobra.Command, args []string) error {
@@ -53,7 +62,7 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	// Get project
 	project, err := store.GetProject(ctx, projectName)
 	if err != nil {
-		if err == errors.ErrProjectNotFound {
+		if errors.Is(err, apperrors.ErrProjectNotFound) {
 			return fmt.Errorf("project %q not found", projectName)
 		}
 		return err
@@ -62,44 +71,61 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	// Get current active deployment
 	currentDeployment, err := store.GetActiveDeployment(ctx, project.ID)
 	if err != nil {
-		if err == errors.ErrNoActiveDeployment {
+		if errors.Is(err, apperrors.ErrNoActiveDeployment) {
 			return fmt.Errorf("no active deployment to rollback from")
 		}
 		return err
 	}
 
-	// Get previous deployment
-	previousDeployment, err := store.GetPreviousDeployment(ctx, project.ID)
-	if err != nil {
-		if err == errors.ErrNoPreviousDeployment {
-			return fmt.Errorf("no previous deployment to rollback to")
+	// Determine target deployment
+	var targetDeployment *state.Deployment
+
+	if rollbackToFlag != "" {
+		if err := validate.GitRef(rollbackToFlag); err != nil {
+			return fmt.Errorf("invalid git ref for --to flag: %w", err)
 		}
-		return err
+		// Rollback to specific SHA
+		targetDeployment, err = store.GetDeploymentBySHA(ctx, project.ID, rollbackToFlag)
+		if err != nil {
+			return fmt.Errorf("cannot find deployment with SHA %s: %w", rollbackToFlag, err)
+		}
+		if targetDeployment.ID == currentDeployment.ID {
+			return fmt.Errorf("cannot rollback to current active deployment")
+		}
+	} else {
+		// Get previous deployment
+		targetDeployment, err = store.GetPreviousDeployment(ctx, project.ID)
+		if err != nil {
+			if errors.Is(err, apperrors.ErrNoPreviousDeployment) {
+				return fmt.Errorf("no previous deployment to rollback to")
+			}
+			return err
+		}
 	}
 
 	fmt.Printf("Rolling back %s from %s to %s\n",
 		projectName,
 		git.ShortSHA(currentDeployment.GitSHA),
-		git.ShortSHA(previousDeployment.GitSHA))
+		git.ShortSHA(targetDeployment.GitSHA))
 
-	// Check that previous worktree still exists
+	// Check that target commit still exists
 	gitMgr := git.NewManager(project.RepoPath)
-	if !gitMgr.CommitExists(ctx, previousDeployment.GitSHA) {
-		return fmt.Errorf("previous deployment commit %s no longer exists in repository", git.ShortSHA(previousDeployment.GitSHA))
+	if !gitMgr.CommitExists(ctx, targetDeployment.GitSHA) {
+		return fmt.Errorf("target deployment commit %s no longer exists in repository", git.ShortSHA(targetDeployment.GitSHA))
 	}
 
-	// Start the previous deployment
-	previousProjectName := compose.GenerateProjectName(projectName, git.ShortSHA(previousDeployment.GitSHA))
-	composeMgr := compose.NewManager(previousDeployment.WorktreePath, project.ComposeFile, previousProjectName)
+	// Start the target deployment
+	targetProjectName := compose.GenerateProjectName(projectName, git.ShortSHA(targetDeployment.GitSHA))
+	composeMgr := compose.NewManager(targetDeployment.WorktreePath, project.ComposeFile, targetProjectName)
 
 	// Validate compose file
 	if err := composeMgr.Validate(ctx); err != nil {
 		return fmt.Errorf("compose validation failed: %w", err)
 	}
 
-	fmt.Println("Starting previous deployment...")
+	fmt.Println("Starting target deployment...")
 	if err := composeMgr.Up(ctx); err != nil {
-		return fmt.Errorf("failed to start previous deployment: %w", err)
+		return fmt.Errorf("failed to start target deployment: %w", err)
 	}
 
 	// Stop current deployment
@@ -118,16 +144,16 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	// Create new deployment record for the rollback
 	rollbackDeployment := &state.Deployment{
 		ProjectID:    project.ID,
-		GitSHA:       previousDeployment.GitSHA,
-		GitRef:       previousDeployment.GitRef,
-		WorktreePath: previousDeployment.WorktreePath,
+		GitSHA:       targetDeployment.GitSHA,
+		GitRef:       targetDeployment.GitRef,
+		WorktreePath: targetDeployment.WorktreePath,
 		Status:       "active",
 	}
 	if err := store.CreateDeployment(ctx, rollbackDeployment); err != nil {
 		return fmt.Errorf("failed to create rollback deployment record: %w", err)
 	}
 
-	fmt.Printf("Rollback successful! %s now running at %s\n", projectName, git.ShortSHA(previousDeployment.GitSHA))
+	fmt.Printf("Rollback successful! %s now running at %s\n", projectName, git.ShortSHA(targetDeployment.GitSHA))
 
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -459,6 +460,40 @@ func (s *Store) GetPreviousDeployment(ctx context.Context, projectID string) (*D
 	return &d, nil
 }
 
+// GetDeploymentBySHA returns a deployment by its git SHA (full or short).
+func (s *Store) GetDeploymentBySHA(ctx context.Context, projectID, sha string) (*Deployment, error) {
+	// Support both full and short SHA by using LIKE with prefix
+	query := `
+		SELECT id, project_id, git_sha, git_ref, worktree_path, status, error_message, started_at, finished_at
+		FROM deployments
+		WHERE project_id = ? AND git_sha LIKE ?
+		ORDER BY started_at DESC LIMIT 1
+	`
+
+	var d Deployment
+	var gitRef, worktreePath, errorMessage sql.NullString
+	var finishedAt sql.NullTime
+	err := s.db.QueryRowContext(ctx, query, projectID, sha+"%").Scan(
+		&d.ID, &d.ProjectID, &d.GitSHA, &gitRef, &worktreePath,
+		&d.Status, &errorMessage, &d.StartedAt, &finishedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.ErrDeploymentNotFound
+		}
+		return nil, fmt.Errorf("failed to get deployment by SHA: %w", err)
+	}
+
+	d.GitRef = gitRef.String
+	d.WorktreePath = worktreePath.String
+	d.ErrorMessage = errorMessage.String
+	if finishedAt.Valid {
+		d.FinishedAt = &finishedAt.Time
+	}
+
+	return &d, nil
+}
+
 // GetInterruptedDeployments returns all deployments with status 'interrupted' or 'deploying'.
 func (s *Store) GetInterruptedDeployments(ctx context.Context) ([]*Deployment, error) {
 	query := `
@@ -513,22 +548,5 @@ func nullStringPtr(s *string) sql.NullString {
 }
 
 func isUniqueConstraintError(err error) bool {
-	return err != nil && (
-	// SQLite unique constraint violation
-	err.Error() == "UNIQUE constraint failed: projects.name" ||
-		// General check
-		contains(err.Error(), "UNIQUE constraint failed"))
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsAt(s, substr, 0))
-}
-
-func containsAt(s, substr string, start int) bool {
-	for i := start; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

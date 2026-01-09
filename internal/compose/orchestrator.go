@@ -2,7 +2,6 @@
 package compose
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -244,8 +243,15 @@ func FindRunningProjects(ctx context.Context, prefix string) ([]string, error) {
 
 // StopProjectByName stops a compose project by its name.
 func StopProjectByName(ctx context.Context, projectName string, timeout time.Duration) error {
-	ctxTimeout, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	var ctxTimeout context.Context
+	var cancel context.CancelFunc
+
+	if timeout > 0 {
+		ctxTimeout, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	} else {
+		ctxTimeout = ctx
+	}
 
 	cmd := exec.CommandContext(ctxTimeout, "docker", "compose", "-p", projectName, "down")
 	output, err := cmd.CombinedOutput()
@@ -261,8 +267,6 @@ func GetProjectStatus(ctx context.Context, projectName string) ([]ServiceStatus,
 	output, err := cmd.Output()
 	if err != nil {
 		// Project might not exist or have no running containers
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
 		return nil, nil
 	}
 
@@ -291,4 +295,9 @@ func GetProjectStatus(ctx context.Context, projectName string) ([]ServiceStatus,
 // ComposeFilePath returns the full path to the compose file.
 func (m *Manager) ComposeFilePath() string {
 	return filepath.Join(m.workingDir, m.composeFile)
+}
+
+// IsServiceRunning checks if a service status indicates it is running.
+func IsServiceRunning(status string) bool {
+	return status == "running" || status == "Up" || (len(status) > 0 && status[0] == 'U')
 }

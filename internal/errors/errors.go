@@ -32,12 +32,6 @@ var (
 	// ErrGitFetchFailed indicates the git fetch operation failed.
 	ErrGitFetchFailed = errors.New("git fetch failed")
 
-	// ErrWorktreeExists indicates the worktree already exists.
-	ErrWorktreeExists = errors.New("worktree already exists")
-
-	// ErrWorktreeNotFound indicates the worktree does not exist.
-	ErrWorktreeNotFound = errors.New("worktree not found")
-
 	// ErrWorktreeCreateFailed indicates worktree creation failed.
 	ErrWorktreeCreateFailed = errors.New("failed to create worktree")
 
@@ -68,9 +62,6 @@ var (
 	// ErrDeploymentNotFound indicates the requested deployment does not exist.
 	ErrDeploymentNotFound = errors.New("deployment not found")
 
-	// ErrDeploymentInProgress indicates a deployment is already in progress.
-	ErrDeploymentInProgress = errors.New("deployment already in progress")
-
 	// ErrNoActiveDeployment indicates there is no active deployment to rollback.
 	ErrNoActiveDeployment = errors.New("no active deployment found")
 
@@ -78,29 +69,3 @@ var (
 	ErrNoPreviousDeployment = errors.New("no previous deployment to rollback to")
 )
 
-// State errors
-var (
-	// ErrDatabaseNotInitialized indicates the database has not been initialized.
-	ErrDatabaseNotInitialized = errors.New("database not initialized")
-
-	// ErrMigrationFailed indicates a database migration failed.
-	ErrMigrationFailed = errors.New("database migration failed")
-)
-
-// Lock errors
-var (
-	// ErrLockAcquireFailed indicates the lock could not be acquired.
-	ErrLockAcquireFailed = errors.New("failed to acquire lock")
-
-	// ErrLockStale indicates the lock is held by a dead process.
-	ErrLockStale = errors.New("lock is stale (held by dead process)")
-)
-
-// Operation errors
-var (
-	// ErrOperationCancelled indicates the operation was cancelled by the user.
-	ErrOperationCancelled = errors.New("operation cancelled")
-
-	// ErrOperationInterrupted indicates the operation was interrupted by a signal.
-	ErrOperationInterrupted = errors.New("operation interrupted")
-)
