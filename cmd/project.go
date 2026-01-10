@@ -72,19 +72,6 @@ Examples:
 	RunE: runProjectValidate,
 }
 
-var projectCleanupCmd = &cobra.Command{
-	Use:   "cleanup",
-	Short: "Clean up orphaned repositories",
-	Long: `Scan for and optionally remove repositories that are not tracked as projects.
-
-This happens when project addition fails after cloning but before database insertion.
-
-Examples:
-  otterstack project cleanup          # List orphaned repos
-  otterstack project cleanup --force  # Remove orphaned repos`,
-	RunE: runProjectCleanup,
-}
-
 var (
 	composeFileFlag      string
 	retentionFlag        int
@@ -98,7 +85,6 @@ func init() {
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectRemoveCmd)
 	projectCmd.AddCommand(projectValidateCmd)
-	projectCmd.AddCommand(projectCleanupCmd)
 
 	// Add flags
 	projectAddCmd.Flags().StringVarP(&composeFileFlag, "compose-file", "f", "", "compose file name (default: auto-detect)")
@@ -106,7 +92,6 @@ func init() {
 	projectAddCmd.Flags().BoolVar(&traefikRoutingFlag, "traefik-routing", false, "enable Traefik priority-based routing for zero-downtime deployments")
 
 	projectRemoveCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "force removal including worktrees and cloned repos")
-	projectCleanupCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "remove orphaned repositories")
 }
 
 func runProjectAdd(cmd *cobra.Command, args []string) error {
@@ -411,91 +396,6 @@ func runProjectValidate(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✓ Project %q validated successfully and marked as ready.\n", name)
 	fmt.Printf("  Deploy with: otterstack deploy %s\n", name)
-	return nil
-}
-
-func runProjectCleanup(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-
-	store, err := initStore()
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-
-	dataDir, err := getDataDir()
-	if err != nil {
-		return err
-	}
-
-	reposDir := fmt.Sprintf("%s/repos", dataDir)
-
-	// List all directories in repos/
-	entries, err := os.ReadDir(reposDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("No repositories directory found.")
-			return nil
-		}
-		return fmt.Errorf("failed to read repos directory: %w", err)
-	}
-
-	// Get all projects from database
-	projects, err := store.ListProjects(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list projects: %w", err)
-	}
-
-	// Build map of tracked repos
-	trackedRepos := make(map[string]bool)
-	for _, p := range projects {
-		if p.RepoType == "remote" {
-			// Extract repo name from path
-			repoName := filepath.Base(p.RepoPath)
-			trackedRepos[repoName] = true
-		}
-	}
-
-	// Find orphaned repos
-	var orphaned []string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if !trackedRepos[entry.Name()] {
-			orphaned = append(orphaned, entry.Name())
-		}
-	}
-
-	if len(orphaned) == 0 {
-		fmt.Println("No orphaned repositories found.")
-		return nil
-	}
-
-	// List orphaned repos
-	fmt.Println("Orphaned repositories:")
-	for _, name := range orphaned {
-		path := fmt.Sprintf("%s/%s", reposDir, name)
-		fmt.Printf("  - %s (%s)\n", name, path)
-	}
-
-	if !forceFlag {
-		fmt.Println("\nTo remove these repositories, run:")
-		fmt.Println("  otterstack project cleanup --force")
-		return nil
-	}
-
-	// Remove orphaned repos
-	fmt.Println("\nRemoving orphaned repositories...")
-	for _, name := range orphaned {
-		path := fmt.Sprintf("%s/%s", reposDir, name)
-		if err := os.RemoveAll(path); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to remove %s: %v\n", path, err)
-		} else {
-			fmt.Printf("  ✓ Removed %s\n", name)
-		}
-	}
-
 	return nil
 }
 

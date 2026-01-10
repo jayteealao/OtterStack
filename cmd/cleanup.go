@@ -16,13 +16,14 @@ import (
 var cleanupCmd = &cobra.Command{
 	Use:   "cleanup",
 	Short: "Clean up orphaned resources",
-	Long: `Clean up orphaned worktrees, containers, and reconcile state.
+	Long: `Clean up orphaned worktrees, containers, repositories, and reconcile state.
 
 This command:
 1. Marks interrupted deployments as failed
 2. Removes orphaned worktrees not referenced by any deployment
 3. Stops containers from failed deployments
-4. Prunes git worktree references`,
+4. Prunes git worktree references
+5. Removes orphaned repositories (cloned but not tracked)`,
 	RunE: runCleanup,
 }
 
@@ -161,6 +162,57 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		if !cleanupDryRunFlag {
 			if err := gitMgr.PruneWorktrees(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "  Warning: failed to prune worktrees for %s: %v\n", project.Name, err)
+			}
+		}
+	}
+
+	// Phase 5: Remove orphaned repositories
+	fmt.Println("\nChecking for orphaned repositories...")
+
+	reposDir := filepath.Join(dataDir, "repos")
+
+	if _, err := os.Stat(reposDir); os.IsNotExist(err) {
+		// No repos directory, nothing to clean
+	} else if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to access repos directory: %v\n", err)
+	} else {
+		entries, err := os.ReadDir(reposDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to read repos directory: %v\n", err)
+		} else {
+			// Build tracked repos map
+			trackedRepos := make(map[string]bool)
+			for _, p := range projects {
+				if p.RepoType == "remote" {
+					repoName := filepath.Base(p.RepoPath)
+					trackedRepos[repoName] = true
+				}
+			}
+
+			// Find orphaned
+			var orphaned []string
+			for _, entry := range entries {
+				if entry.IsDir() && !trackedRepos[entry.Name()] {
+					orphaned = append(orphaned, entry.Name())
+				}
+			}
+
+			if len(orphaned) > 0 {
+				fmt.Printf("Found %d orphaned repository/repositories:\n", len(orphaned))
+				for _, name := range orphaned {
+					path := filepath.Join(reposDir, name)
+					fmt.Printf("  - %s (%s)\n", name, path)
+
+					if !cleanupDryRunFlag {
+						if err := os.RemoveAll(path); err != nil {
+							fmt.Fprintf(os.Stderr, "Warning: failed to remove %s: %v\n", path, err)
+						} else {
+							fmt.Printf("    Removed %s\n", name)
+						}
+					}
+				}
+			} else {
+				fmt.Println("No orphaned repositories found.")
 			}
 		}
 	}
