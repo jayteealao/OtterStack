@@ -103,6 +103,53 @@ Error: deployment in progress (lock file exists)
    ```
    This shows the PID and timestamp of the lock holder.
 
+#### Lock File Race Condition (TOCTOU)
+
+**Symptom:**
+```
+Error: deployment in progress (lock file exists, age: 0s)
+```
+But when you check:
+```bash
+ls -la ~/.otterstack/locks/
+# Shows empty directory - no lock file exists
+```
+
+**Cause:** Transient race condition during lock acquisition when multiple processes attempt to deploy simultaneously. The lock file was deleted between the time the system checked for it and when it tried to read it.
+
+**Solutions:**
+
+1. **Automatic retry (v0.2.0-rc.2+):**
+   Modern versions of OtterStack automatically retry lock acquisition up to 5 times with exponential backoff. This should resolve the issue automatically in most cases.
+
+2. **Manual retry:**
+   Simply try the deployment again:
+   ```bash
+   otterstack deploy myapp
+   ```
+
+3. **If error persists, check for stuck processes:**
+   ```bash
+   ps aux | grep otterstack
+   # Look for hung deployment processes
+   ```
+
+4. **Manual cleanup if needed:**
+   ```bash
+   # Remove any stuck lock files
+   rm ~/.otterstack/locks/*.lock
+
+   # Kill any stuck processes (if found)
+   pkill -f "otterstack deploy"
+   ```
+
+**Prevention:**
+
+If you frequently encounter this error, you likely have multiple deployment processes starting simultaneously. Consider:
+- Using a job queue or CI/CD system to serialize deployments
+- Adding delays between deployments in automated scripts
+- Using deployment slots or blue-green deployment patterns
+
 ### Containers Not Starting
 
 **Symptom:**

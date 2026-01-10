@@ -3,6 +3,7 @@ package lock
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -161,4 +162,125 @@ func TestReleaseNilLock(t *testing.T) {
 	var lock *DeploymentLock
 	// Should not panic
 	lock.Release()
+}
+
+// TestAcquireDeploymentLockRaceCondition simulates TOCTOU race condition
+func TestAcquireDeploymentLockRaceCondition(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "otterstack-test-race-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	projectName := "test-race"
+	lockDir := filepath.Join(tmpDir, "locks")
+	if err := os.MkdirAll(lockDir, 0755); err != nil {
+		t.Fatalf("Failed to create lock dir: %v", err)
+	}
+	lockPath := filepath.Join(lockDir, projectName+".lock")
+
+	// Create lock that will be deleted during acquisition
+	f, err := os.Create(lockPath)
+	if err != nil {
+		t.Fatalf("Failed to create lock file: %v", err)
+	}
+	f.Close()
+
+	// Delete concurrently
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		os.Remove(lockPath)
+	}()
+
+	// Should succeed after retry
+	lock, err := AcquireDeploymentLock(tmpDir, projectName)
+	if lock != nil {
+		defer lock.Release()
+	}
+
+	// Should either succeed or fail with accurate message
+	if err != nil && strings.Contains(err.Error(), "lock file exists") {
+		// Verify file actually exists if error claims it does
+		if _, statErr := os.Stat(lockPath); os.IsNotExist(statErr) {
+			t.Errorf("Error claims lock exists but file doesn't: %v", err)
+		}
+	}
+
+	t.Logf("Lock acquisition result: %v", err)
+}
+
+// TestAcquireDeploymentLockErrorMessages verifies accurate error messages
+func TestAcquireDeploymentLockErrorMessages(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "otterstack-test-errors-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	projectName := "test-errors"
+
+	// Acquire first lock
+	lock1, err := AcquireDeploymentLock(tmpDir, projectName)
+	if err != nil {
+		t.Fatalf("Failed to acquire first lock: %v", err)
+	}
+	defer lock1.Release()
+
+	// Try second lock
+	_, err = AcquireDeploymentLock(tmpDir, projectName)
+	if err == nil {
+		t.Fatal("Expected error when acquiring lock that is already held")
+	}
+
+	// Error should mention "deployment in progress"
+	if !strings.Contains(err.Error(), "deployment in progress") {
+		t.Errorf("Error should mention 'deployment in progress', got: %v", err)
+	}
+
+	// If error mentions lock exists, verify it actually exists
+	if strings.Contains(err.Error(), "lock file exists") {
+		lockPath := filepath.Join(tmpDir, "locks", projectName+".lock")
+		if _, statErr := os.Stat(lockPath); os.IsNotExist(statErr) {
+			t.Errorf("Error claims lock exists but file doesn't exist: %v", err)
+		}
+	}
+
+	t.Logf("Got expected error: %v", err)
+}
+
+// TestAcquireDeploymentLockRetryExhaustion tests retry limit behavior
+func TestAcquireDeploymentLockRetryExhaustion(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "otterstack-test-retry-")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	projectName := "test-retry"
+
+	// Create a lock that won't be released
+	lock1, err := AcquireDeploymentLock(tmpDir, projectName)
+	if err != nil {
+		t.Fatalf("Failed to acquire initial lock: %v", err)
+	}
+	defer lock1.Release()
+
+	// Try to acquire with limited retries
+	start := time.Now()
+	lock2, err := AcquireDeploymentLockWithRetry(tmpDir, projectName, 3)
+	duration := time.Since(start)
+
+	if err == nil {
+		if lock2 != nil {
+			lock2.Release()
+		}
+		t.Fatal("Expected error when lock is held")
+	}
+
+	// Should complete reasonably quickly (< 500ms with 3 retries and short backoffs)
+	if duration > 500*time.Millisecond {
+		t.Errorf("Retry exhaustion took too long: %v", duration)
+	}
+
+	t.Logf("Retry exhaustion completed in %v with error: %v", duration, err)
 }
