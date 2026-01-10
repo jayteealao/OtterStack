@@ -1,3 +1,6 @@
 otterstack.exe
 otterstack
 .env.*
+
+# Example binaries
+examples/**/*.exe

@@ -264,6 +264,8 @@ If a deployment is interrupted, the lock automatically expires after 30 minutes.
 
 ## Examples
 
+For custom output handler examples (timestamped logging, progress parsing, file logging), see the [examples/](examples/) directory.
+
 ### Deploy a Web Application
 
 ```bash
