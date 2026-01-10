@@ -49,7 +49,12 @@ func NewDeployer(store state.StateStore, gitMgr git.GitOperations) *Deployer {
 // Deploy performs a deployment for the given project.
 func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts DeployOptions) (*DeployResult, error) {
 	// 1. ACQUIRE FILE LOCK (prevents concurrent deployments)
-	deploymentLock, err := lock.AcquireDeploymentLock(opts.DataDir, project.Name)
+	lockMgr, err := lock.NewManager(opts.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create lock manager: %w", err)
+	}
+
+	deploymentLock, err := lockMgr.Acquire(ctx, project.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire deployment lock: %w", err)
 	}

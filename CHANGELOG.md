@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0-rc.4] - 2026-01-10
+
+### Fixed
+- Fixed critical double-locking bug where deployment command acquired locks at both command and orchestrator layers, causing immediate "deployment in progress (lock file exists, age: 0s)" errors
+- Removed redundant lock acquisition from command layer (cmd/deploy.go), keeping only orchestrator-level locking for better separation of concerns
+
+### Changed
+- Consolidated two separate locking systems (DeploymentLock with O_EXCL and lock.Manager with flock) into single unified system using lock.Manager
+- Deployer now uses lock.Manager for more robust locking with PID-based stale detection instead of time-based detection
+- Better cross-platform file locking support via gofrs/flock library
+
+### Deprecated
+- Marked `DeploymentLock`, `AcquireDeploymentLock()`, and `AcquireDeploymentLockWithRetry()` as deprecated in favor of `lock.Manager`
+- Deprecated functions remain for backward compatibility but are no longer used in production code
+
 ## [v0.2.0-rc.3] - 2026-01-10
 
 ### Fixed

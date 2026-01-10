@@ -1,4 +1,8 @@
 // Package lock provides file-based locking for OtterStack operations.
+//
+// DEPRECATED: The DeploymentLock implementation in this file is deprecated.
+// Use lock.Manager instead, which provides more robust PID-based stale detection
+// and cross-platform file locking via flock.
 package lock
 
 import (
@@ -10,6 +14,9 @@ import (
 )
 
 // DeploymentLock represents a file-based lock for deployment operations.
+//
+// Deprecated: Use lock.Manager instead, which provides more robust locking
+// with PID-based stale detection and cross-platform support via flock.
 type DeploymentLock struct {
 	path string
 	file *os.File
@@ -26,6 +33,9 @@ const (
 // AcquireDeploymentLock attempts to acquire a deployment lock for a project with automatic retry.
 // Retries on transient TOCTOU race conditions using exponential backoff.
 // Returns an error if a lock already exists (deployment in progress).
+//
+// Deprecated: Use lock.Manager.Acquire() instead, which provides more robust
+// PID-based stale detection and cross-platform file locking via flock.
 func AcquireDeploymentLock(dataDir, projectName string) (*DeploymentLock, error) {
 	return AcquireDeploymentLockWithRetry(dataDir, projectName, defaultMaxRetries)
 }

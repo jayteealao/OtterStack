@@ -58,20 +58,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 
-	// Initialize lock manager
-	lockMgr, err := initLockManager()
-	if err != nil {
-		return err
-	}
-
-	// Acquire project lock
-	printVerbose("Acquiring lock for project %s...", projectName)
-	lock, err := lockMgr.Acquire(ctx, projectName)
-	if err != nil {
-		return fmt.Errorf("failed to acquire lock: %w", err)
-	}
-	defer lock.Release()
-
 	// Get project
 	project, err := store.GetProject(ctx, projectName)
 	if err != nil {
