@@ -15,6 +15,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Version is the current version of OtterStack.
+// Can be overridden at build time: go build -ldflags "-X github.com/jayteealao/otterstack/cmd.Version=v1.0.0"
+var Version = "v0.1.0"
+
 var (
 	cfgFile string
 	dataDir string
@@ -30,6 +34,7 @@ designed for single Linux VPS environments.
 
 It manages deployments using git worktrees for atomic releases and provides
 rollback capabilities with zero-downtime deployments.`,
+	Version: Version,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
