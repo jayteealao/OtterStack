@@ -68,6 +68,9 @@ func AcquireDeploymentLock(dataDir, projectName string) (*DeploymentLock, error)
 
 // Release releases the deployment lock and removes the lock file.
 func (l *DeploymentLock) Release() {
+	if l == nil {
+		return
+	}
 	if l.file != nil {
 		l.file.Close()
 	}

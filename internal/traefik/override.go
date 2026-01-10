@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -31,6 +32,7 @@ func GenerateOverride(worktreePath string, priority int64) (string, error) {
 	for serviceName, serviceConfig := range compose.Services {
 		if service, ok := serviceConfig.(map[string]interface{}); ok {
 			if labels, ok := service["labels"]; ok {
+				// Check map format: {"traefik.http.routers.web.priority": "100"}
 				if labelMap, ok := labels.(map[string]interface{}); ok {
 					for labelKey := range labelMap {
 						// Check if this is a priority label for the service's router
@@ -39,6 +41,23 @@ func GenerateOverride(worktreePath string, priority int64) (string, error) {
 							return "", fmt.Errorf("existing Traefik priority label found: %s (service: %s). "+
 								"Please remove existing priority labels or disable Traefik routing for this project",
 								labelKey, serviceName)
+						}
+					}
+				}
+				// Check array format: ["traefik.http.routers.web.priority=100"]
+				if labelArray, ok := labels.([]interface{}); ok {
+					for _, label := range labelArray {
+						if labelStr, ok := label.(string); ok {
+							// Parse "key=value" format and check for priority
+							// Split on first '=' to get the key
+							if idx := strings.Index(labelStr, "="); idx != -1 {
+								labelKey := labelStr[:idx]
+								if isPriorityLabel(labelKey) {
+									return "", fmt.Errorf("existing Traefik priority label found: %s (service: %s). "+
+										"Please remove existing priority labels or disable Traefik routing for this project",
+										labelKey, serviceName)
+								}
+							}
 						}
 					}
 				}
