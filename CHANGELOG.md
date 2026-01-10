@@ -12,11 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed critical double-locking bug where deployment command acquired locks at both command and orchestrator layers, causing immediate "deployment in progress (lock file exists, age: 0s)" errors
 - Removed redundant lock acquisition from command layer (cmd/deploy.go), keeping only orchestrator-level locking for better separation of concerns
+- **Fixed environment variable loading during deployment**: Docker Compose now receives env vars during validation and pull operations, eliminating "variable is not set" warnings when env vars are correctly configured
+- **Fixed rollback cleanup for failed deployments**: Containers from failed deployments are now properly stopped instead of being left in a restart loop
+  - Added `--timeout 0` flag to force immediate SIGKILL for unhealthy containers
+  - Increased rollback timeout from 30s to 60s
+  - Improved error logging with manual cleanup instructions when automated cleanup fails
 
 ### Changed
 - Consolidated two separate locking systems (DeploymentLock with O_EXCL and lock.Manager with flock) into single unified system using lock.Manager
 - Deployer now uses lock.Manager for more robust locking with PID-based stale detection instead of time-based detection
 - Better cross-platform file locking support via gofrs/flock library
+- **Reordered deployment flow**: Environment file now written BEFORE validation and pull operations (was after)
+- **Validation now uses env vars**: Changed from `Validate()` to `ValidateWithEnv()` to support env var substitution in compose files
+- **Image pull now uses env vars**: Added `PullWithEnv()` method to support env vars in image names
 
 ### Deprecated
 - Marked `DeploymentLock`, `AcquireDeploymentLock()`, and `AcquireDeploymentLockWithRetry()` as deprecated in favor of `lock.Manager`

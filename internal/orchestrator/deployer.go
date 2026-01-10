@@ -134,9 +134,24 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 	composeProjectName := compose.GenerateProjectName(project.Name, shortSHA)
 	composeMgr := compose.NewManager(worktreePath, project.ComposeFile, composeProjectName)
 
-	// Validate compose file
+	// Write env file BEFORE any docker compose operations
+	// This ensures env vars are available for validation and pulling
+	envVars, err := d.store.GetEnvVars(ctx, project.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get env vars: %w", err)
+	}
+
+	envFilePath, err := writeEnvFile(opts.DataDir, project.Name, envVars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write env file: %w", err)
+	}
+	if envFilePath != "" {
+		onVerbose(fmt.Sprintf("Using env file: %s", envFilePath))
+	}
+
+	// Validate compose file with env vars
 	onVerbose("Validating compose file...")
-	if err := composeMgr.Validate(ctx); err != nil {
+	if err := composeMgr.ValidateWithEnv(ctx, envFilePath); err != nil {
 		return nil, fmt.Errorf("compose validation failed: %w", err)
 	}
 
@@ -152,10 +167,10 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 		}
 	}
 
-	// Pull images if not skipped
+	// Pull images if not skipped (with env file for variable substitution)
 	if !opts.SkipPull {
 		onStatus("Pulling images...")
-		if err := composeMgr.Pull(ctx); err != nil {
+		if err := composeMgr.PullWithEnv(ctx, envFilePath); err != nil {
 			onVerbose(fmt.Sprintf("Warning: pull failed (continuing): %v", err))
 		}
 	}
@@ -163,20 +178,6 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 	// Check context before starting services
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("deployment cancelled: %w", ctx.Err())
-	}
-
-	// Write env file if project has env vars
-	envVars, err := d.store.GetEnvVars(ctx, project.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get env vars: %w", err)
-	}
-
-	envFilePath, err := writeEnvFile(opts.DataDir, project.Name, envVars)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write env file: %w", err)
-	}
-	if envFilePath != "" {
-		onVerbose(fmt.Sprintf("Using env file: %s", envFilePath))
 	}
 
 	// Start services with timeout
@@ -195,8 +196,14 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 		if err := traefik.WaitForHealthy(deployCtx, composeProjectName, traefik.DefaultHealthTimeout); err != nil {
 			// UNHEALTHY: Stop new containers, keep old running
 			onStatus("Health check failed. Rolling back...")
-			if stopErr := compose.StopProjectByName(ctx, composeProjectName, 30*time.Second); stopErr != nil {
-				onVerbose(fmt.Sprintf("Warning: failed to stop unhealthy containers: %v", stopErr))
+			// Use parent context for cleanup (not deployCtx which may have timed out)
+			// Give it 60 seconds to force-stop all containers
+			if stopErr := compose.StopProjectByName(ctx, composeProjectName, 60*time.Second); stopErr != nil {
+				// Log the full error but continue with deployment failure
+				onStatus(fmt.Sprintf("ERROR: Failed to stop unhealthy containers: %v", stopErr))
+				onStatus("Manual cleanup required: docker compose -p " + composeProjectName + " down --timeout 0")
+			} else {
+				onStatus("Successfully stopped unhealthy containers.")
 			}
 			errMsg := err.Error()
 			d.store.UpdateDeploymentStatus(ctx, deployment.ID, "failed", &errMsg)

@@ -277,6 +277,42 @@ func (m *Manager) Pull(ctx context.Context) error {
 	return nil
 }
 
+// PullWithEnv downloads container images with environment variable substitution.
+// Docker output streams in real-time to configured output streams (see SetOutputStreams).
+// This is useful when image names or build contexts reference env vars.
+//
+// Parameters:
+//   - ctx: Context for timeout and cancellation
+//   - envFilePath: Optional path to .env file for variable substitution (empty string to skip)
+//
+// Returns:
+//   - context.Canceled if context cancelled
+//   - error if command fails
+func (m *Manager) PullWithEnv(ctx context.Context, envFilePath string) error {
+	args := m.baseArgs()
+
+	// Add env file if provided
+	if envFilePath != "" {
+		args = append(args, "--env-file", envFilePath)
+	}
+
+	args = append(args, "pull")
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Dir = m.workingDir
+	cmd.Stdout = m.getStdout()
+	cmd.Stderr = m.getStderr()
+
+	err := cmd.Run()
+	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("compose pull cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("compose pull failed: %w", err)
+	}
+	return nil
+}
+
 // Logs retrieves logs from compose services.
 // Note: This method uses buffered output (not streaming) because it returns
 // logs as a string for the caller to process or display. The interface signature
@@ -411,7 +447,9 @@ func StopProjectByName(ctx context.Context, projectName string, timeout time.Dur
 		ctxTimeout = ctx
 	}
 
-	cmd := exec.CommandContext(ctxTimeout, "docker", "compose", "-p", projectName, "down")
+	// Use --timeout 0 to force immediate container kill instead of graceful shutdown
+	// This is critical for rollback scenarios where containers may be unhealthy/restarting
+	cmd := exec.CommandContext(ctxTimeout, "docker", "compose", "-p", projectName, "down", "--timeout", "0")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		ctxErr := ctxTimeout.Err()
