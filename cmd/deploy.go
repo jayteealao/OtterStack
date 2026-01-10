@@ -82,6 +82,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	if project.Status != "ready" {
+		if project.Status == "unconfigured" {
+			return fmt.Errorf("project %q is not ready for deployment\n\nThe project needs validation first:\n  1. Set environment variables: otterstack env set %s KEY=value\n  2. Validate configuration: otterstack project validate %s\n  3. Then deploy: otterstack deploy %s", projectName, projectName, projectName, projectName)
+		}
 		return fmt.Errorf("project is not ready (status: %s)", project.Status)
 	}
 

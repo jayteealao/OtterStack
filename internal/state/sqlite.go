@@ -264,6 +264,44 @@ func (s *Store) UpdateProjectStatus(ctx context.Context, name, status string) er
 	return nil
 }
 
+// UpdateProjectRepo updates repository details for a project.
+func (s *Store) UpdateProjectRepo(ctx context.Context, name, repoType, repoURL, repoPath string) error {
+	query := `UPDATE projects SET repo_type = ?, repo_url = ?, repo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
+	result, err := s.db.ExecContext(ctx, query, repoType, repoURL, repoPath, name)
+	if err != nil {
+		return fmt.Errorf("failed to update project repo: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.ErrProjectNotFound
+	}
+
+	return nil
+}
+
+// UpdateProjectCompose updates compose file and status for a project.
+func (s *Store) UpdateProjectCompose(ctx context.Context, name, composeFile, status string) error {
+	query := `UPDATE projects SET compose_file = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?`
+	result, err := s.db.ExecContext(ctx, query, composeFile, status, name)
+	if err != nil {
+		return fmt.Errorf("failed to update project compose: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.ErrProjectNotFound
+	}
+
+	return nil
+}
+
 // DeleteProject deletes a project by name.
 func (s *Store) DeleteProject(ctx context.Context, name string) error {
 	query := `DELETE FROM projects WHERE name = ?`

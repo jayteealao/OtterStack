@@ -133,6 +133,27 @@ func (m *Manager) Validate(ctx context.Context) error {
 	return nil
 }
 
+// ValidateWithEnv validates the compose file with environment variables.
+func (m *Manager) ValidateWithEnv(ctx context.Context, envFilePath string) error {
+	args := m.baseArgs()
+
+	// Add env file if provided
+	if envFilePath != "" {
+		args = append(args, "--env-file", envFilePath)
+	}
+
+	args = append(args, "config", "--quiet")
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Dir = m.workingDir
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", errors.ErrComposeInvalid, string(output))
+	}
+	return nil
+}
+
 // Pull pulls images for all services.
 func (m *Manager) Pull(ctx context.Context) error {
 	args := m.baseArgs()
