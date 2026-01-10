@@ -4,6 +4,8 @@ package compose
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -17,6 +19,8 @@ type Manager struct {
 	workingDir  string
 	composeFile string
 	projectName string
+	stdout      io.Writer // If nil, uses os.Stdout
+	stderr      io.Writer // If nil, uses os.Stderr
 }
 
 // ServiceStatus represents the status of a compose service.
@@ -40,6 +44,28 @@ func (m *Manager) ProjectName() string {
 	return m.projectName
 }
 
+// getStdout returns the configured stdout or os.Stdout if not set.
+func (m *Manager) getStdout() io.Writer {
+	if m.stdout != nil {
+		return m.stdout
+	}
+	return os.Stdout
+}
+
+// getStderr returns the configured stderr or os.Stderr if not set.
+func (m *Manager) getStderr() io.Writer {
+	if m.stderr != nil {
+		return m.stderr
+	}
+	return os.Stderr
+}
+
+// SetOutputStreams sets custom output streams for testing.
+func (m *Manager) SetOutputStreams(stdout, stderr io.Writer) {
+	m.stdout = stdout
+	m.stderr = stderr
+}
+
 // Up starts the compose services with --wait flag.
 // If envFilePath is not empty, the file is passed to docker compose via --env-file.
 func (m *Manager) Up(ctx context.Context, envFilePath string) error {
@@ -54,13 +80,18 @@ func (m *Manager) Up(ctx context.Context, envFilePath string) error {
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = m.workingDir
+	cmd.Stdout = m.getStdout()
+	cmd.Stderr = m.getStderr()
 
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("%w: %s", errors.ErrComposeTimeout, string(output))
+			return fmt.Errorf("%w", errors.ErrComposeTimeout)
 		}
-		return fmt.Errorf("compose up failed: %s\n%s", err, string(output))
+		if ctx.Err() != nil {
+			return fmt.Errorf("compose up cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("compose up failed: %w", err)
 	}
 	return nil
 }
@@ -75,10 +106,15 @@ func (m *Manager) Down(ctx context.Context, removeVolumes bool) error {
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = m.workingDir
+	cmd.Stdout = m.getStdout()
+	cmd.Stderr = m.getStderr()
 
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("compose down failed: %s\n%s", err, string(output))
+		if ctx.Err() != nil {
+			return fmt.Errorf("compose down cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("compose down failed: %w", err)
 	}
 	return nil
 }
@@ -161,10 +197,15 @@ func (m *Manager) Pull(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = m.workingDir
+	cmd.Stdout = m.getStdout()
+	cmd.Stderr = m.getStderr()
 
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("compose pull failed: %s\n%s", err, string(output))
+		if ctx.Err() != nil {
+			return fmt.Errorf("compose pull cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("compose pull failed: %w", err)
 	}
 	return nil
 }
@@ -214,10 +255,15 @@ func (m *Manager) Restart(ctx context.Context) error {
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = m.workingDir
+	cmd.Stdout = m.getStdout()
+	cmd.Stderr = m.getStderr()
 
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("compose restart failed: %s\n%s", err, string(output))
+		if ctx.Err() != nil {
+			return fmt.Errorf("compose restart cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("compose restart failed: %w", err)
 	}
 	return nil
 }

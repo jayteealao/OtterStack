@@ -2,8 +2,11 @@ package compose
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -126,4 +129,74 @@ func TestFindRunningProjects(t *testing.T) {
 	} else {
 		t.Logf("Found projects with prefix 'otterstack-': %v", projects)
 	}
+}
+
+// Test output stream handling
+func TestManager_DefaultOutputStreams(t *testing.T) {
+	m := NewManager("/path", "compose.yaml", "test")
+
+	// stdout and stderr should default to nil
+	assert.Nil(t, m.stdout)
+	assert.Nil(t, m.stderr)
+
+	// getStdout/getStderr should return os.Stdout/Stderr when nil
+	assert.Equal(t, os.Stdout, m.getStdout())
+	assert.Equal(t, os.Stderr, m.getStderr())
+}
+
+func TestManager_SetOutputStreams(t *testing.T) {
+	m := NewManager("/path", "compose.yaml", "test")
+
+	stdout := NewSafeBuffer()
+	stderr := NewSafeBuffer()
+
+	m.SetOutputStreams(stdout, stderr)
+
+	assert.Equal(t, stdout, m.getStdout())
+	assert.Equal(t, stderr, m.getStderr())
+}
+
+// Test SafeBuffer thread safety
+func TestSafeBuffer_ConcurrentWrites(t *testing.T) {
+	buf := NewSafeBuffer()
+
+	var wg sync.WaitGroup
+	numGoroutines := 100
+	writesPerGoroutine := 100
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			for j := 0; j < writesPerGoroutine; j++ {
+				buf.Write([]byte(fmt.Sprintf("line %d-%d\n", n, j)))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	output := buf.String()
+	// Verify we got all writes (100 goroutines * 100 writes = 10000 lines)
+	lineCount := strings.Count(output, "line ")
+	assert.Equal(t, numGoroutines*writesPerGoroutine, lineCount, "Should have all concurrent writes")
+}
+
+func TestSafeBuffer_Reset(t *testing.T) {
+	buf := NewSafeBuffer()
+
+	buf.Write([]byte("test content"))
+	assert.NotEmpty(t, buf.String())
+
+	buf.Reset()
+	assert.Empty(t, buf.String())
+}
+
+func TestSafeBuffer_String(t *testing.T) {
+	buf := NewSafeBuffer()
+
+	content := "test output\n"
+	buf.Write([]byte(content))
+
+	assert.Equal(t, content, buf.String())
 }

@@ -169,6 +169,55 @@ otterstack env unset <project-name> <key>
 otterstack env import <project-name> <env-file>
 ```
 
+## Deployment Output
+
+OtterStack streams Docker Compose output in real-time during deployments, giving you full visibility into what's happening:
+
+- **Interactive terminals**: Full progress bars and colors (automatic)
+- **CI/CD pipelines**: Plain text output (automatic detection)
+- **Errors**: Shown immediately as they occur
+
+Docker automatically detects your terminal type and formats output appropriately. You'll see:
+
+- Image pull progress with download sizes
+- Container creation and startup status
+- Health check results
+- Docker warnings and deprecation notices
+
+### Example Output
+
+**Local Development:**
+```
+Fetching latest changes...
+Deploying myapp (v1.0.0 -> abc1234)
+Pulling images...
+[+] Pulling app
+  ⠿ 7c3b88808835 Already exists
+  ⠿ a0d0a0d46f8b Pull complete
+Starting services...
+[+] Running 3/3
+ ✔ Network myapp_default    Created
+ ✔ Container myapp-db-1     Started
+ ✔ Container myapp-web-1    Started
+Waiting for containers to be healthy...
+Deployment successful!
+```
+
+**CI/CD (GitHub Actions, GitLab CI):**
+```
+Fetching latest changes...
+Deploying myapp (v1.0.0 -> abc1234)
+Pulling images...
+#1 [internal] load metadata for docker.io/library/nginx:alpine
+#1 DONE 1.2s
+Starting services...
+Container myapp-db-1     Creating
+Container myapp-db-1     Created
+Container myapp-db-1     Starting
+Container myapp-db-1     Started
+Deployment successful!
+```
+
 ## Configuration
 
 OtterStack stores data in `~/.otterstack` by default:
