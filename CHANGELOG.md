@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0-rc.2] - 2026-01-10
+
+### Fixed
+- Fixed nil pointer panic in `DeploymentLock.Release()` when called on nil receiver
+- Fixed database constraint error when adding projects with remote git URLs
+- Fixed array-format priority label detection in Traefik override generation (now detects both map and array formats)
+
 ### Changed
 - Docker output now streams in real-time during deployments instead of being buffered
 - Users see image pull progress, container creation, and warnings as they happen

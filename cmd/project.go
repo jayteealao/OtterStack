@@ -119,15 +119,51 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Create project record FIRST (enables env var setting and rollback on failure)
+	// Determine if URL or path BEFORE creating project
+	isRemote := validate.IsURL(repoArg)
+
+	var repoType, repoURL, repoPath string
+
+	if isRemote {
+		// Remote repository - validate first
+		if err := validate.RepoURL(repoArg); err != nil {
+			return fmt.Errorf("invalid repository URL: %w", err)
+		}
+
+		repoType = "remote"
+		repoURL = repoArg
+
+		// Pre-flight auth check
+		printVerbose("Checking repository access...")
+		if err := git.CheckAuth(ctx, repoURL); err != nil {
+			return fmt.Errorf("cannot access repository: %w", err)
+		}
+
+		// Clone path will be managed by OtterStack
+		dataDir, err := getDataDir()
+		if err != nil {
+			return err
+		}
+		repoPath = fmt.Sprintf("%s/repos/%s", dataDir, name)
+	} else {
+		// Local repository - validate first
+		if err := validate.RepoPath(repoArg); err != nil {
+			return fmt.Errorf("invalid repository path: %w", err)
+		}
+
+		repoType = "local"
+		repoPath = repoArg
+	}
+
+	// Create project record with correct repo_type (satisfies CHECK constraint)
 	project := &state.Project{
 		Name:                  name,
-		RepoType:              "",  // Set after determining local/remote
-		RepoURL:               "",
-		RepoPath:              "",
+		RepoType:              repoType,
+		RepoURL:               repoURL,
+		RepoPath:              repoPath,
 		ComposeFile:           "",
 		WorktreeRetention:     retentionFlag,
-		Status:                "cloning", // Initial status
+		Status:                "cloning",
 		TraefikRoutingEnabled: traefikRoutingFlag,
 	}
 
@@ -146,42 +182,8 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// Determine if URL or path
-	isRemote := validate.IsURL(repoArg)
-
-	var repoType, repoURL, repoPath string
-
+	// Perform clone if remote
 	if isRemote {
-		// Remote repository
-		if err := validate.RepoURL(repoArg); err != nil {
-			projectCreated = false
-			return fmt.Errorf("invalid repository URL: %w", err)
-		}
-
-		repoType = "remote"
-		repoURL = repoArg
-
-		// Pre-flight auth check
-		printVerbose("Checking repository access...")
-		if err := git.CheckAuth(ctx, repoURL); err != nil {
-			projectCreated = false
-			return fmt.Errorf("cannot access repository: %w", err)
-		}
-
-		// Clone path will be managed by OtterStack
-		dataDir, err := getDataDir()
-		if err != nil {
-			projectCreated = false
-			return err
-		}
-		repoPath = fmt.Sprintf("%s/repos/%s", dataDir, name)
-
-		// Update project with repo details
-		if err := store.UpdateProjectRepo(ctx, name, repoType, repoURL, repoPath); err != nil {
-			projectCreated = false
-			return fmt.Errorf("failed to update project: %w", err)
-		}
-
 		// Clone the repository (uses atomic clone with temp dir)
 		fmt.Printf("Cloning repository %s...\n", repoURL)
 		gitMgr := git.NewManager(repoPath)
@@ -190,21 +192,6 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to clone repository: %w", err)
 		}
 		fmt.Println("Clone complete.")
-	} else {
-		// Local repository
-		if err := validate.RepoPath(repoArg); err != nil {
-			projectCreated = false
-			return fmt.Errorf("invalid repository path: %w", err)
-		}
-
-		repoType = "local"
-		repoPath = repoArg
-
-		// Update project with repo details
-		if err := store.UpdateProjectRepo(ctx, name, repoType, repoURL, repoPath); err != nil {
-			projectCreated = false
-			return fmt.Errorf("failed to update project: %w", err)
-		}
 	}
 
 	// Find compose file
