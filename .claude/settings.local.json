@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.docker.com)",
+      "WebFetch(domain:kamal-deploy.org)",
+      "WebSearch",
+      "Bash(npx -y zai-cli search:*)"
+    ]
+  }
+}
