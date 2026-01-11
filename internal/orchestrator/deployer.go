@@ -186,6 +186,13 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 	defer cancel()
 
 	if err := composeMgr.Up(deployCtx, envFilePath); err != nil {
+		// Get container logs to help debug the failure
+		onStatus("Deployment failed. Fetching container logs...")
+		logs, logErr := composeMgr.Logs(ctx, "", 50) // Last 50 lines from all services
+		if logErr == nil && logs != "" {
+			onStatus("Container logs (last 50 lines):")
+			onStatus(logs)
+		}
 		return nil, fmt.Errorf("failed to start services: %w", err)
 	}
 
