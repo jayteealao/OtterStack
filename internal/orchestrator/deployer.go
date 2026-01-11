@@ -14,6 +14,7 @@ import (
 	"github.com/jayteealao/otterstack/internal/lock"
 	"github.com/jayteealao/otterstack/internal/state"
 	"github.com/jayteealao/otterstack/internal/traefik"
+	"github.com/jayteealao/otterstack/internal/validate"
 )
 
 // DeployOptions contains options for a deployment.
@@ -149,7 +150,29 @@ func (d *Deployer) Deploy(ctx context.Context, project *state.Project, opts Depl
 		onVerbose(fmt.Sprintf("Using env file: %s", envFilePath))
 	}
 
-	// Validate compose file with env vars
+	// PRE-DEPLOYMENT ENV VALIDATION GATE
+	// Check that all required environment variables are present before starting deployment
+	onVerbose("Validating environment variables...")
+	composePath := filepath.Join(worktreePath, project.ComposeFile)
+	validation, err := validate.ValidateEnvVars(composePath, envVars)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate env vars: %w", err)
+	}
+
+	// If required variables are missing, abort deployment with clear error message
+	if !validation.AllPresent {
+		errorMsg := validate.FormatValidationError(validation, project.Name)
+		onStatus(errorMsg)
+		return nil, fmt.Errorf("missing required environment variables (see above for details)")
+	}
+
+	// If optional variables are missing, show warning but continue
+	if len(validation.Optional) > 0 {
+		warningMsg := validate.FormatValidationWarning(validation)
+		onStatus(warningMsg)
+	}
+
+	// Validate compose file syntax with env vars
 	onVerbose("Validating compose file...")
 	if err := composeMgr.ValidateWithEnv(ctx, envFilePath); err != nil {
 		return nil, fmt.Errorf("compose validation failed: %w", err)
