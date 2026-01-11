@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-01-11
+
+### Added
+- **Enhanced environment variable management system** with smart type detection and validation:
+  - Automatic parsing of Docker Compose files to extract all environment variable references
+  - Support for all Docker Compose variable formats: `${VAR}`, `${VAR:-default}`, `${VAR:?error}`, `$VAR`
+  - Intelligent type detection from variable names (URL, EMAIL, PORT, INTEGER, BOOLEAN, STRING)
+  - Type-specific validation (URLs require schemes, ports must be 1-65535, emails validated, etc.)
+  - Interactive prompts with type-aware UI (Yes/No dialogs for booleans, validated text inputs for others)
+  - Automatic `.env.example` generation for documentation
+
+- **Enhanced `project add` command**:
+  - Auto-discovers `.env.<project-name>` files in current directory
+  - Parses compose file to identify required variables
+  - Interactively prompts for missing variables with smart defaults
+  - Stores collected variables in database
+  - Sets project status to "ready" when all required vars are present
+
+- **New `env scan` subcommand**:
+  - Scans existing projects for missing environment variables
+  - Identifies which variables are already configured
+  - Interactively prompts for missing required and optional variables
+  - Updates stored variables in database
+  - Generates/updates `.env.example` file
+
+- **Pre-deployment validation gate**:
+  - Validates all required environment variables before deployment starts
+  - Fails fast with clear, actionable error messages
+  - Shows which variables are missing and how to set them
+  - Prevents wasted deployment attempts with incomplete configuration
+
+### Changed
+- Project setup workflow now includes environment variable configuration
+- Environment variables are validated before any Docker operations during deployment
+- Clear user feedback throughout variable collection process with grouped prompts (required first, optional second)
+
+### Technical
+- Added `internal/compose/env_parser.go` - environment variable extraction from Docker Compose files
+- Added `internal/prompt/types.go` - type detection and validation functions
+- Added `internal/prompt/env_collector.go` - interactive variable collection with charmbracelet/huh
+- Added `internal/validate/env_validator.go` - pre-deployment validation
+- Added comprehensive test coverage (97.6%+ on all new packages)
+- New dependency: `github.com/charmbracelet/huh@v0.8.0` for interactive TUI prompts
+
 ## [v0.2.0-rc.4] - 2026-01-10
 
 ### Fixed
