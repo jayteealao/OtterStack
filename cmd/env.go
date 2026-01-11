@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/jayteealao/otterstack/internal/compose"
 	apperrors "github.com/jayteealao/otterstack/internal/errors"
+	"github.com/jayteealao/otterstack/internal/prompt"
 	"github.com/jayteealao/otterstack/internal/validate"
 	"github.com/spf13/cobra"
 )
@@ -94,6 +97,26 @@ Examples:
 	RunE: runEnvLoad,
 }
 
+var envScanCmd = &cobra.Command{
+	Use:   "scan <project>",
+	Short: "Scan compose file and interactively configure missing environment variables",
+	Long: `Scan the project's Docker Compose file for required environment variables
+and interactively prompt for any missing values.
+
+This command:
+  1. Parses the compose file to find all environment variables
+  2. Checks which variables are already set
+  3. Interactively prompts for missing required variables
+  4. Prompts for optional variables with defaults (press Enter to skip)
+  5. Stores the collected values
+  6. Generates/updates .env.example file
+
+Examples:
+  otterstack env scan myapp`,
+	Args: cobra.ExactArgs(1),
+	RunE: runEnvScan,
+}
+
 var showValuesFlag bool
 
 func init() {
@@ -103,6 +126,7 @@ func init() {
 	envCmd.AddCommand(envListCmd)
 	envCmd.AddCommand(envUnsetCmd)
 	envCmd.AddCommand(envLoadCmd)
+	envCmd.AddCommand(envScanCmd)
 
 	envListCmd.Flags().BoolVar(&showValuesFlag, "show-values", false, "show actual values instead of masking")
 }
@@ -395,4 +419,102 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func runEnvScan(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	projectName := args[0]
+
+	store, err := initStore()
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	// Get project
+	project, err := store.GetProject(ctx, projectName)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrProjectNotFound) {
+			return fmt.Errorf("project %q not found", projectName)
+		}
+		return err
+	}
+
+	// Build path to compose file
+	composePath := filepath.Join(project.RepoPath, project.ComposeFile)
+
+	// Check if compose file exists
+	if _, err := os.Stat(composePath); os.IsNotExist(err) {
+		return fmt.Errorf("compose file not found at %s", composePath)
+	}
+
+	fmt.Printf("🔍 Scanning %s for environment variables...\n", project.ComposeFile)
+
+	// Parse compose file to find all required variables
+	requiredVars, err := compose.ParseEnvVars(composePath)
+	if err != nil {
+		return fmt.Errorf("failed to parse compose file: %w", err)
+	}
+
+	if len(requiredVars) == 0 {
+		fmt.Println("✓ No environment variables found in compose file.")
+		return nil
+	}
+
+	fmt.Printf("Found %d environment variable(s)\n", len(requiredVars))
+
+	// Get currently stored variables
+	envVars, err := store.GetEnvVars(ctx, project.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get stored env vars: %w", err)
+	}
+
+	// Identify missing variables
+	missingVars := compose.GetMissingVars(requiredVars, envVars)
+
+	if len(missingVars) == 0 {
+		fmt.Println("\n✓ All required environment variables are already set!")
+		return nil
+	}
+
+	fmt.Printf("\n%d variable(s) need to be configured\n", len(missingVars))
+
+	// Interactively collect missing variables
+	newVars, err := prompt.CollectMissingVars(missingVars)
+	if err != nil {
+		return fmt.Errorf("failed to collect variables: %w", err)
+	}
+
+	// Merge with existing vars
+	for k, v := range newVars {
+		envVars[k] = v
+	}
+
+	// Store all variables
+	if err := store.SetEnvVars(ctx, project.ID, envVars); err != nil {
+		return fmt.Errorf("failed to store env vars: %w", err)
+	}
+
+	// Generate .env.example file
+	examplePath := filepath.Join(project.RepoPath, ".env.example")
+	if err := compose.GenerateEnvExample(requiredVars, examplePath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to generate .env.example: %v\n", err)
+	} else {
+		fmt.Printf("\n✓ Generated %s\n", examplePath)
+	}
+
+	// Print summary
+	fmt.Printf("\n✓ Successfully configured %d variable(s)\n", len(newVars))
+	for k := range newVars {
+		fmt.Printf("  %s\n", k)
+	}
+
+	// Check if all required vars are now present
+	stillMissing := compose.GetMissingVars(requiredVars, envVars)
+	if len(stillMissing) == 0 {
+		fmt.Println("\n✓ All required variables are now configured. Project is ready to deploy!")
+	}
+
+	fmt.Println("\nNote: Redeploy the project for changes to take effect.")
+	return nil
 }

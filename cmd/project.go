@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/jayteealao/otterstack/internal/compose"
 	apperrors "github.com/jayteealao/otterstack/internal/errors"
 	"github.com/jayteealao/otterstack/internal/git"
+	"github.com/jayteealao/otterstack/internal/prompt"
 	"github.com/jayteealao/otterstack/internal/state"
 	"github.com/jayteealao/otterstack/internal/validate"
 	"github.com/spf13/cobra"
@@ -207,17 +209,114 @@ func runProjectAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to update project: %w", err)
 	}
 
+	// AUTO-DISCOVER ENVIRONMENT VARIABLES
+	fmt.Println("\nConfiguring environment variables...")
+
+	// 1. Check for .env.<project-name> in current directory
+	envFilePath := fmt.Sprintf(".env.%s", name)
+	envVars := make(map[string]string)
+
+	if _, err := os.Stat(envFilePath); err == nil {
+		fmt.Printf("✓ Found %s - Loading variables...\n", envFilePath)
+		loadedVars, err := loadEnvFile(envFilePath)
+		if err != nil {
+			fmt.Printf("⚠ Warning: failed to load env file: %v\n", err)
+		} else {
+			envVars = loadedVars
+			fmt.Printf("✓ Loaded %d variables from %s\n", len(envVars), envFilePath)
+		}
+	}
+
+	// 2. Parse compose file to find all required variables
+	composePath := filepath.Join(repoPath, composeFile)
+	requiredVars, err := compose.ParseEnvVars(composePath)
+	if err != nil {
+		fmt.Printf("⚠ Warning: failed to parse compose file for env vars: %v\n", err)
+	} else {
+		// 3. Identify missing variables
+		missingVars := compose.GetMissingVars(requiredVars, envVars)
+
+		if len(missingVars) > 0 {
+			fmt.Printf("\nFound %d missing variables. Let's configure them:\n", len(missingVars))
+
+			// 4. Interactively collect missing variables
+			newVars, err := prompt.CollectMissingVars(missingVars)
+			if err != nil {
+				// Non-fatal - user might have cancelled or encountered an error
+				fmt.Printf("⚠ Warning: failed to collect variables: %v\n", err)
+				fmt.Println("You can configure them later using: otterstack env scan", name)
+			} else {
+				// Merge new vars into existing vars
+				for k, v := range newVars {
+					envVars[k] = v
+				}
+				fmt.Printf("✓ Configured %d variables\n", len(newVars))
+			}
+		} else {
+			fmt.Println("✓ All required variables are already configured")
+		}
+
+		// 5. Store all variables in database
+		if len(envVars) > 0 {
+			if err := store.SetEnvVars(ctx, name, envVars); err != nil {
+				fmt.Printf("⚠ Warning: failed to store env vars: %v\n", err)
+			} else {
+				fmt.Printf("✓ Stored %d variables in database\n", len(envVars))
+			}
+		}
+
+		// 6. Generate .env.example for documentation
+		examplePath := filepath.Join(repoPath, ".env.example")
+		if err := compose.GenerateEnvExample(requiredVars, examplePath); err != nil {
+			// Non-fatal
+			printVerbose(fmt.Sprintf("Could not generate .env.example: %v", err))
+		} else {
+			printVerbose(fmt.Sprintf("Generated .env.example"))
+		}
+	}
+
+	// Determine final status based on env var configuration
+	finalStatus := "unconfigured"
+	if len(envVars) > 0 {
+		// Check if all required vars are present
+		if requiredVars != nil {
+			missingRequired := compose.GetMissingVars(requiredVars, envVars)
+			// Filter to only truly required vars (not optional with defaults)
+			hasRequiredMissing := false
+			for _, mv := range missingRequired {
+				if mv.IsRequired || !mv.HasDefault {
+					hasRequiredMissing = true
+					break
+				}
+			}
+			if !hasRequiredMissing {
+				finalStatus = "ready"
+			}
+		}
+	}
+
+	// Update status
+	if err := store.UpdateProjectStatus(ctx, name, finalStatus); err != nil {
+		fmt.Printf("⚠ Warning: failed to update project status: %v\n", err)
+	}
+
 	// Success - don't rollback
 	projectCreated = true
 
-	fmt.Printf("Project %q added successfully (status: unconfigured)\n", name)
+	fmt.Printf("\n✓ Project %q added successfully (status: %s)\n", name, finalStatus)
 	fmt.Printf("  Repository: %s (%s)\n", repoPath, repoType)
 	fmt.Printf("  Compose file: %s\n", composeFile)
 
-	fmt.Println("\nNext steps:")
-	fmt.Printf("  1. Set environment variables: otterstack env set %s KEY=value\n", name)
-	fmt.Printf("  2. Validate configuration: otterstack project validate %s\n", name)
-	fmt.Printf("  3. Deploy: otterstack deploy %s\n", name)
+	if finalStatus == "ready" {
+		fmt.Println("\nProject is ready to deploy:")
+		fmt.Printf("  otterstack deploy %s\n", name)
+	} else {
+		fmt.Println("\nNext steps:")
+		fmt.Printf("  1. Configure remaining variables: otterstack env scan %s\n", name)
+		fmt.Printf("  2. Or set manually: otterstack env set %s KEY=value\n", name)
+		fmt.Printf("  3. Validate: otterstack project validate %s\n", name)
+		fmt.Printf("  4. Deploy: otterstack deploy %s\n", name)
+	}
 
 	return nil
 }
@@ -416,4 +515,63 @@ func writeEnvFile(path string, envVars map[string]string) error {
 	}
 
 	return nil
+}
+
+// loadEnvFile parses a .env file and returns a map of variables.
+// Supports standard .env format: KEY=value (one per line).
+// Skips comments (lines starting with #) and empty lines.
+// Removes surrounding quotes from values.
+func loadEnvFile(path string) (map[string]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	vars := make(map[string]string)
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse KEY=value format
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			// Warn but continue processing other lines
+			fmt.Fprintf(os.Stderr, "Warning: ignoring invalid line %d in %s: %s\n", lineNum, path, line)
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Remove surrounding quotes if present
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') ||
+				(value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		// Validate key format (alphanumeric + underscore)
+		if err := validate.EnvKey(key); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: ignoring invalid variable name on line %d in %s: %s\n", lineNum, path, key)
+			continue
+		}
+
+		vars[key] = value
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	return vars, nil
 }
