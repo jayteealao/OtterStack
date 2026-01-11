@@ -500,6 +500,14 @@ func (m *Manager) ComposeFilePath() string {
 	return filepath.Join(m.workingDir, m.composeFile)
 }
 
+// ParseEnvVars extracts environment variable references from the compose file.
+// This is a convenience wrapper around the package-level ParseEnvVars function
+// that uses the Manager's compose file path.
+func (m *Manager) ParseEnvVars() ([]EnvVarReference, error) {
+	composePath := m.ComposeFilePath()
+	return ParseEnvVars(composePath)
+}
+
 // IsServiceRunning checks if a service status indicates it is running.
 func IsServiceRunning(status string) bool {
 	return status == "running" || status == "Up" || (len(status) > 0 && status[0] == 'U')
