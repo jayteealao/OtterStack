@@ -1,0 +1,13 @@
+name: simple-nginx
+category: basic
+features_tested:
+  - basic deployment
+  - container startup
+  - health checks
+  - worktree creation
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_http_response: "http://localhost:8080"
+cleanup: full

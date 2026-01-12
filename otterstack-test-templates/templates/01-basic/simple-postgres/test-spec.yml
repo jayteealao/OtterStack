@@ -1,0 +1,12 @@
+name: simple-postgres
+category: basic
+features_tested:
+  - database container deployment
+  - postgres health checks
+  - initialization with env vars
+  - longer start period
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+cleanup: full

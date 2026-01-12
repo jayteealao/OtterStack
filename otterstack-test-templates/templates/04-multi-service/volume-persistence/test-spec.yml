@@ -1,0 +1,13 @@
+name: volume-persistence
+category: multi-service
+features_tested:
+  - named volumes
+  - data persistence across deployments
+  - volume lifecycle management
+expected_behavior: success
+verification:
+  - check_containers_running: 2
+  - check_health_status: healthy
+  - check_data_persists: "data survives redeployment"
+  - check_volumes_exist: ["db-data", "app-files"]
+cleanup: full_with_volumes

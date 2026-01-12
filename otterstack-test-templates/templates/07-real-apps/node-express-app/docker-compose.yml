@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: otterstack-test-express-app:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - APP_NAME=${APP_NAME:-OtterStack Test App}
+      - VERSION=${VERSION:-1.0.0}
+      - API_KEY=${API_KEY:?API key is required}
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

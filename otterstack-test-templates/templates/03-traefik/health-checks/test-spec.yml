@@ -1,0 +1,14 @@
+name: health-checks
+category: traefik
+requires_traefik: true
+features_tested:
+  - health check failure detection
+  - deployment rollback on unhealthy
+  - no traffic to unhealthy containers
+  - old containers keep running
+expected_behavior: fail_health_check
+verification:
+  - check_deployment_failed: true
+  - check_new_containers_stopped: true
+  - check_error_message: "health check"
+cleanup: full

@@ -1,0 +1,17 @@
+name: validation-gate
+category: env-vars
+features_tested:
+  - validation gate passes with vars set
+  - required vars properly substituted
+  - deployment succeeds after validation
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_env_vars_set: true
+pre_test:
+  - set_env_vars:
+      API_KEY: "test-key-abc123"
+      DATABASE_URL: "postgres://testuser:testpass@db:5432/testdb"
+      SERVICE_NAME: "test-validation-service"
+cleanup: full

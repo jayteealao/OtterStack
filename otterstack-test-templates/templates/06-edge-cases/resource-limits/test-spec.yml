@@ -1,0 +1,15 @@
+name: resource-limits
+category: edge-cases
+features_tested:
+  - CPU limits
+  - memory limits
+  - resource reservations
+  - deployment within constraints
+  - container startup under resource pressure
+expected_behavior: success
+verification:
+  - check_containers_running: 2
+  - check_health_status: healthy
+  - check_resource_limits_applied: true
+  - check_memory_usage: "<= limits"
+cleanup: full

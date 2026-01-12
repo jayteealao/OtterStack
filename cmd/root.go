@@ -17,7 +17,7 @@ import (
 
 // Version is the current version of OtterStack.
 // Can be overridden at build time: go build -ldflags "-X github.com/jayteealao/otterstack/cmd.Version=v1.0.0"
-var Version = "v0.2.0"
+var Version = "v0.2.1"
 
 var (
 	cfgFile string

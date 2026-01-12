@@ -1,0 +1,11 @@
+services:
+  web:
+    image: alpine:latest
+    command: sh -c 'env | sort && sleep 300'
+    environment:
+      - STRING_VAR=${STRING_VAR}
+      - DATABASE_URL=${DATABASE_URL}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - HTTP_PORT=${HTTP_PORT}
+      - WORKER_COUNT=${WORKER_COUNT}
+      - DEBUG_ENABLED=${DEBUG_ENABLED}

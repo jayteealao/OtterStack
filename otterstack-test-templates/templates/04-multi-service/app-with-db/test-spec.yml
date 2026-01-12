@@ -1,0 +1,17 @@
+name: app-with-db
+category: multi-service
+features_tested:
+  - multi-service deployment
+  - service dependencies (depends_on)
+  - health check conditions
+  - startup ordering
+  - env var sharing between services
+expected_behavior: success
+verification:
+  - check_containers_running: 2
+  - check_health_status: healthy
+  - check_db_connection: true
+pre_test:
+  - set_env_vars:
+      DB_PASSWORD: "testpass123"
+cleanup: full

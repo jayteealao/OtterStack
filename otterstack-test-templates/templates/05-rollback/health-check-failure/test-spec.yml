@@ -1,0 +1,14 @@
+name: health-check-failure
+category: rollback
+features_tested:
+  - health check timeout (5 minutes)
+  - deployment rollback on failure
+  - old containers remain running
+  - zero downtime on failed deployment
+expected_behavior: fail_with_rollback
+verification:
+  - check_deployment_failed: true
+  - check_old_containers_running: true
+  - check_new_containers_unhealthy: true
+  - check_no_downtime: "old version still serving traffic"
+cleanup: full

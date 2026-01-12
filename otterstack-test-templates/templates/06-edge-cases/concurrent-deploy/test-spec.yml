@@ -1,0 +1,17 @@
+name: concurrent-deploy
+category: edge-cases
+features_tested:
+  - deployment locking mechanism
+  - prevent simultaneous deployments
+  - lock acquisition and release
+  - second deployment waits or fails gracefully
+expected_behavior: success_with_locking
+special_test:
+  concurrent_deployments: 2
+  expect_serialization: true
+verification:
+  - check_only_one_deployment_active: true
+  - check_lock_prevents_concurrent: true
+  - check_second_deployment_waits: true
+  - check_both_complete_eventually: true
+cleanup: full

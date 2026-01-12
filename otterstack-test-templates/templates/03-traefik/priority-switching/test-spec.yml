@@ -1,0 +1,16 @@
+name: priority-switching
+category: traefik
+requires_traefik: true
+features_tested:
+  - traefik detection
+  - priority label generation
+  - zero-downtime traffic switching
+  - docker-compose.traefik.yml creation
+  - old container shutdown
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_traefik_priority: true
+  - check_override_file_exists: true
+cleanup: full

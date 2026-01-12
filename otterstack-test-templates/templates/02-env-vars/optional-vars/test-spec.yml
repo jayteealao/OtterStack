@@ -1,0 +1,16 @@
+name: optional-vars
+category: env-vars
+features_tested:
+  - optional env vars with defaults
+  - ${VAR:-default} syntax
+  - warning messages for optional vars
+  - deployment proceeds with defaults
+expected_behavior: success_with_warnings
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_warning_message: "optional variables"
+  - check_default_values_used: true
+pre_test:
+  - do_not_set_env_vars: true
+cleanup: full

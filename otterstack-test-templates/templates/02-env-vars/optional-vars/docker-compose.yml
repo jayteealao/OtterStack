@@ -1,0 +1,16 @@
+services:
+  web:
+    image: nginx:alpine
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - MAX_CONNECTIONS=${MAX_CONNECTIONS:-100}
+      - ENABLE_DEBUG=${ENABLE_DEBUG:-false}
+      - CACHE_TTL=${CACHE_TTL:-3600}
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

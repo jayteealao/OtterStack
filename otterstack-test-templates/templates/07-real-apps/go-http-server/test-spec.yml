@@ -1,0 +1,20 @@
+name: go-http-server
+category: real-apps
+features_tested:
+  - real Go application
+  - multi-stage Docker build
+  - compiled binary deployment
+  - health check endpoint
+  - environment variable configuration
+  - minimal image size
+  - API endpoints
+  - graceful shutdown
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_http_endpoint: "http://localhost:8080/health"
+  - check_api_functionality: "POST /echo"
+  - check_env_vars_loaded: true
+  - check_image_size: "< 20MB"
+cleanup: full

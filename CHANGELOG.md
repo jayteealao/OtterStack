@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.1] - 2026-01-12
+
+### Added
+- **Comprehensive test suite** for human-in-the-loop validation of OtterStack deployments:
+  - 16 Docker Compose test templates across 7 categories
+  - Basic functionality tests (nginx, redis, postgres)
+  - Environment variable tests (validation gate, type detection, defaults)
+  - Traefik routing tests (zero-downtime deployments, health checks)
+  - Multi-service tests (dependencies, startup ordering, volume persistence)
+  - Rollback scenario tests (health check failures, startup failures)
+  - Edge case tests (concurrent deployments, resource limits)
+  - Real application tests (Node.js Express, Go HTTP server with multi-stage builds)
+  - Semi-automated test runner script with manual verification points
+  - VPS setup script for one-time environment preparation
+  - Helper libraries for verification, cleanup, and logging
+  - Comprehensive documentation with verification steps for each template
+
 ## [v0.2.0] - 2026-01-11
 
 ### Added

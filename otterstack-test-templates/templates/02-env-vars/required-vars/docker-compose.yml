@@ -1,0 +1,15 @@
+services:
+  web:
+    image: nginx:alpine
+    environment:
+      - API_KEY=${API_KEY:?API key is required}
+      - DATABASE_URL=${DATABASE_URL:?Database URL must be set}
+      - SERVICE_NAME=${SERVICE_NAME:?Service name is required}
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

@@ -1,0 +1,18 @@
+name: no-traefik-mode
+category: traefik
+requires_traefik: false
+features_tested:
+  - graceful degradation without Traefik
+  - deployment proceeds without routing
+  - warning message shown
+  - no priority labels applied
+  - containers still healthy
+expected_behavior: success_without_routing
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_warning_message: "Traefik not detected"
+  - check_no_priority_labels: true
+pre_test:
+  - ensure_traefik_stopped: true
+cleanup: full

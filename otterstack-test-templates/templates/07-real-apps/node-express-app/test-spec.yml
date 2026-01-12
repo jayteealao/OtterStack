@@ -1,0 +1,18 @@
+name: node-express-app
+category: real-apps
+features_tested:
+  - real Node.js application
+  - Express framework
+  - health check endpoint
+  - environment variable configuration
+  - Docker image build
+  - API endpoints
+  - graceful shutdown
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_health_status: healthy
+  - check_http_endpoint: "http://localhost:3000/health"
+  - check_api_functionality: "POST /echo"
+  - check_env_vars_loaded: true
+cleanup: full

@@ -1,0 +1,15 @@
+name: required-vars
+category: env-vars
+features_tested:
+  - required env var detection
+  - validation gate
+  - deployment blocking before Docker operations
+  - error message clarity
+expected_behavior: fail_without_vars
+verification:
+  - check_error_message: "missing required environment variables"
+  - check_containers_not_started: true
+  - check_no_docker_operations: true
+pre_test:
+  - do_not_set_env_vars: true
+cleanup: minimal

@@ -1,0 +1,8 @@
+services:
+  web:
+    image: alpine:latest
+    # Command that exits immediately with error
+    command: sh -c "echo 'Startup failed!' && exit 1"
+    ports:
+      - "8080:80"
+    restart: "no"

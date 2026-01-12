@@ -1,0 +1,12 @@
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      # Long start_period to create time window for concurrent deployment
+      start_period: 30s

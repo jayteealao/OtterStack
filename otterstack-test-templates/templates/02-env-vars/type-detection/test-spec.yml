@@ -1,0 +1,23 @@
+name: type-detection
+category: env-vars
+features_tested:
+  - type detection from variable names
+  - URL type (DATABASE_URL)
+  - EMAIL type (ADMIN_EMAIL)
+  - PORT type (HTTP_PORT)
+  - INTEGER type (WORKER_COUNT)
+  - BOOLEAN type (DEBUG_ENABLED)
+  - STRING type (STRING_VAR)
+expected_behavior: success
+verification:
+  - check_containers_running: 1
+  - check_env_vars_set: true
+pre_test:
+  - set_env_vars:
+      STRING_VAR: "hello_otterstack"
+      DATABASE_URL: "https://db.example.com:5432"
+      ADMIN_EMAIL: "admin@example.com"
+      HTTP_PORT: "8080"
+      WORKER_COUNT: "4"
+      DEBUG_ENABLED: "true"
+cleanup: full

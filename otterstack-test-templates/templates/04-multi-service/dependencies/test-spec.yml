@@ -1,0 +1,13 @@
+name: dependencies
+category: multi-service
+features_tested:
+  - 3-tier architecture
+  - chained dependencies (redis → api → frontend)
+  - startup ordering
+  - all services must be healthy
+expected_behavior: success
+verification:
+  - check_containers_running: 3
+  - check_health_status: healthy
+  - check_startup_order: "redis then api then frontend"
+cleanup: full
