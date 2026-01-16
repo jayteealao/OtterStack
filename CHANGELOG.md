@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.2] - 2026-01-16
+
+### Fixed
+- **Health check logic** now properly handles containers without healthcheck definitions:
+  - Previously, containers without healthchecks would timeout after 5 minutes
+  - Now checks container Status (running/Up) for containers without healthchecks
+  - Containers with healthchecks still validated via health status (no regression)
+  - Makes OtterStack more user-friendly for simple services (redis, databases)
+  - Maintains safety by still failing deployment for crashed/exited containers
+  - Fully backward compatible with existing deployments
+
 ## [v0.2.1] - 2026-01-12
 
 ### Added
