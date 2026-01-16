@@ -41,12 +41,12 @@ func WaitForHealthy(ctx context.Context, composeProject string, timeout time.Dur
 }
 
 // checkHealth checks the health status of all containers in a compose project.
-// Returns true if all containers are healthy, false otherwise.
+// Returns true if all containers are healthy or running (for containers without healthchecks), false otherwise.
 func checkHealth(ctx context.Context, composeProject string) (bool, error) {
-	// Get container health status
+	// Get container status and health
 	cmd := exec.CommandContext(ctx, "docker", "compose",
 		"-p", composeProject,
-		"ps", "--format", "{{.Name}}\t{{.Health}}")
+		"ps", "--format", "{{.Name}}\t{{.Status}}\t{{.Health}}")
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -60,16 +60,29 @@ func checkHealth(ctx context.Context, composeProject string) (bool, error) {
 			continue
 		}
 		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
-			continue
+		if len(parts) < 3 {
+			continue // Need at least Name, Status, Health
 		}
 
-		health := strings.TrimSpace(parts[1])
-		// Consider: empty (no health check), "starting", or "unhealthy" as not ready
-		if health == "" || health == "starting" || health == "unhealthy" {
-			return false, nil
+		status := strings.TrimSpace(parts[1])
+		health := strings.TrimSpace(parts[2])
+
+		// If container has healthcheck defined (health not empty)
+		if health != "" {
+			// Must be healthy (not starting or unhealthy)
+			if health == "starting" || health == "unhealthy" {
+				return false, nil // Health check exists but not healthy
+			}
+			// health == "healthy" → continue to next container
+		} else {
+			// No healthcheck defined - check if container is at least running
+			// Status can be: "Up", "Up X seconds", "running", etc.
+			// Docker uses "Up" for compose ps, "running" for docker ps
+			if !strings.HasPrefix(status, "Up") && status != "running" {
+				return false, nil // Container not running
+			}
 		}
 	}
 
-	return true, nil // All containers have health status
+	return true, nil // All containers ready (either healthy or running)
 }
